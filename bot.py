@@ -1,16 +1,15 @@
 import os
 import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import InputFile
-from aiogram.utils import executor
+from aiogram import Bot, Dispatcher, Router
+from aiogram.types import Message, FSInputFile
+from aiogram.filters import Command
 from gradio_client import Client, file
 import aiohttp
-from aiohttp import ClientSession
 
 # Telegram Bot Token
 BOT_TOKEN = "7844051995:AAG0yvKGMjwHCajxDmzN6O47rcjd4SOzJOw"  # Replace with your bot token
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
 # Admin Chat ID
 ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
@@ -44,7 +43,7 @@ async def download_file(file_id: str, save_as: str):
     try:
         file_info = await bot.get_file(file_id)
         file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
-        async with ClientSession() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(file_url) as response:
                 if response.status == 200:
                     with open(save_as, "wb") as f:
@@ -58,7 +57,7 @@ async def download_file(file_id: str, save_as: str):
 # Asynchronously upload a file to Catbox
 async def upload_to_catbox(file_path: str):
     try:
-        async with ClientSession() as session:
+        async with aiohttp.ClientSession() as session:
             with open(file_path, "rb") as f:
                 data = {"reqtype": "fileupload"}
                 files = {"fileToUpload": f}
@@ -71,21 +70,25 @@ async def upload_to_catbox(file_path: str):
         raise Exception(f"Error uploading to Catbox: {e}")
 
 
+# Router setup
+router = Router()
+
+
 # Start command
-@dp.message_handler(commands=["start"])
-async def start(message: types.Message):
+@router.message(Command(commands=["start"]))
+async def start(message: Message):
     chat_id = message.chat.id
     user_data[chat_id] = {"step": "awaiting_source"}
-    await message.reply("Welcome to the Face Swap Bot! Please send the source image (face to swap).")
+    await message.answer("Welcome to the Face Swap Bot! Please send the source image (face to swap).")
 
 
 # Handle photos sent by the user
-@dp.message_handler(content_types=["photo"])
-async def handle_photo(message: types.Message):
+@router.message(lambda message: message.photo)
+async def handle_photo(message: Message):
     chat_id = message.chat.id
 
     if chat_id not in user_data:
-        await message.reply("Please start the bot using /start.")
+        await message.answer("Please start the bot using /start.")
         return
 
     step = user_data[chat_id].get("step", None)
@@ -97,11 +100,11 @@ async def handle_photo(message: types.Message):
             await download_file(file_id, source_image)
             user_data[chat_id]["source_image"] = source_image
             user_data[chat_id]["step"] = "awaiting_target"
-            await message.reply("Great! Now send the target image (destination face).")
+            await message.answer("Great! Now send the target image (destination face).")
 
         elif step == "awaiting_target":
             if "source_image" not in user_data[chat_id]:
-                await message.reply("Source image is missing. Please restart with /start.")
+                await message.answer("Source image is missing. Please restart with /start.")
                 reset_user_data(chat_id)
                 return
 
@@ -109,7 +112,7 @@ async def handle_photo(message: types.Message):
             target_image = f"{chat_id}_target.jpg"
             await download_file(file_id, target_image)
             user_data[chat_id]["target_image"] = target_image
-            await message.reply("Processing your request. Please wait...")
+            await message.answer("Processing your request. Please wait...")
 
             # Perform the face swap
             while True:
@@ -129,7 +132,8 @@ async def handle_photo(message: types.Message):
                     swapped_image_url = await upload_to_catbox(result)
 
                     # Send the swapped image to the user
-                    await bot.send_photo(chat_id, InputFile(result), caption=f"Face-swapped image: {swapped_image_url}")
+                    swapped_image = FSInputFile(result)
+                    await bot.send_photo(chat_id, swapped_image, caption=f"Face-swapped image: {swapped_image_url}")
                     break
 
                 except Exception as e:
@@ -140,7 +144,7 @@ async def handle_photo(message: types.Message):
             reset_user_data(chat_id)
 
         else:
-            await message.reply("Invalid step. Please restart with /start.")
+            await message.answer("Invalid step. Please restart with /start.")
             reset_user_data(chat_id)
 
     except Exception as e:
@@ -162,6 +166,12 @@ def cleanup_files(chat_id):
                 os.remove(user_data[chat_id][key])
 
 
-# Run the bot
+# Application startup
+async def main():
+    dp.include_router(router)
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
