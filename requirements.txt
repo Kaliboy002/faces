@@ -1,5 +1,5 @@
 requests
-Gradio_client
+gradio_client
 aiohttp
 aiofiles
 python-dotenv
