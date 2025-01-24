@@ -2,3 +2,5 @@ pyTelegramBotAPI
 requests
 Gradio_client
 aiohttp
+aiofiles
+python-dotenv
