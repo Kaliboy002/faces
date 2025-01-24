@@ -17,7 +17,7 @@ ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
 api_clients = [
     "Kaliboy002/face-swapm",
     "Jonny001/Image-Face-Swap",
-    # Add your API clients here...
+    # Add more API clients here...
 ]
 
 current_client_index = 0
@@ -26,6 +26,7 @@ queue = asyncio.Queue()  # Async processing queue
 
 
 def get_client():
+    """Get the current Gradio client."""
     global current_client_index
     return Client(api_clients[current_client_index])
 
@@ -68,6 +69,7 @@ async def upload_to_catbox(file_path):
 
 @bot.message_handler(commands=["start"])
 async def start(message):
+    """Handle the /start command."""
     chat_id = message.chat.id
     user_data[chat_id] = {"step": "awaiting_source"}
     await bot.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
@@ -75,6 +77,7 @@ async def start(message):
 
 @bot.message_handler(content_types=["photo"])
 async def handle_photo(message):
+    """Handle photos sent by the user."""
     chat_id = message.chat.id
 
     if chat_id not in user_data:
@@ -139,9 +142,10 @@ async def process_queue():
 
 def cleanup_files(chat_id):
     """Clean up temporary files."""
-    for key in ["source_image", "target_image"]:
-        if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
-            os.remove(user_data[chat_id][key])
+    if chat_id in user_data:
+        for key in ["source_image", "target_image"]:
+            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
+                os.remove(user_data[chat_id][key])
 
 
 def reset_user_data(chat_id):
@@ -150,8 +154,15 @@ def reset_user_data(chat_id):
         user_data.pop(chat_id, None)
 
 
-# Start processing the queue in the background
-asyncio.create_task(process_queue())
+async def main():
+    """Main entry point to start the bot and queue processor."""
+    # Start the queue processing task
+    asyncio.create_task(process_queue())
 
-# Run the bot
-bot.infinity_polling()
+    # Run the bot
+    await bot.infinity_polling()
+
+
+# Start the event loop
+if __name__ == "__main__":
+    asyncio.run(main())
