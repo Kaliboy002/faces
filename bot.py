@@ -1,16 +1,25 @@
-import json
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import requests
 from gradio_client import Client, file
+from pyrogram import Client as PyroClient, filters
 
-# List of Gradio Clients
+# Telegram Bot Token and API Information
+API_ID = "15787995"  # Replace with your API ID
+API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
+BOT_TOKEN = "7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w"  # Replace with your Telegram Bot Token
+ADMIN_CHAT_ID = 123456789  # Replace with your Telegram user ID
+
+# Pyrogram Bot Initialization
+app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+# List of Gradio Clients for Face Swap APIs
 api_clients = [
     "Kaliboy002/face-swapm",
     "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
-
 current_client_index = 0
+user_data = {}
 
 def get_client():
     global current_client_index
@@ -20,56 +29,104 @@ def switch_client():
     global current_client_index
     current_client_index = (current_client_index + 1) % len(api_clients)
 
-def process_face_swap(source_path, target_path):
-    while True:
-        try:
-            client = get_client()
-            result = client.predict(
-                source_file=file(source_path),
-                target_file=file(target_path),
-                doFaceEnhancer=True,
-                api_name="/predict"
+def download_file(client, file_id, save_as):
+    try:
+        file_path = client.download_media(file_id, file_name=save_as)
+        return file_path
+    except Exception as e:
+        raise Exception(f"Failed to download file: {e}")
+
+def upload_to_catbox(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            response = requests.post(
+                "https://catbox.moe/user/api.php",
+                data={"reqtype": "fileupload"},
+                files={"fileToUpload": f}
             )
-            return result
-        except Exception as e:
-            print(f"Error with API {api_clients[current_client_index]}: {e}")
-            switch_client()
+            response.raise_for_status()
+            return response.text.strip()
+    except Exception as e:
+        raise Exception(f"Failed to upload file to Catbox: {e}")
 
-class RequestHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        if self.path == "/face-swap":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data)
+@app.on_message(filters.command("start"))
+def start(client, message):
+    chat_id = message.chat.id
+    user_data[chat_id] = {"step": "awaiting_source"}
+    client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
 
-            source_file = data.get("source_file")
-            target_file = data.get("target_file")
+@app.on_message(filters.photo)
+def handle_photo(client, message):
+    chat_id = message.chat.id
+    if chat_id not in user_data:
+        client.send_message(chat_id, "Please start the bot using /start.")
+        return
 
-            if not source_file or not target_file:
-                self.send_response(400)
-                self.end_headers()
-                self.wfile.write(b"Missing source_file or target_file in the request")
+    step = user_data[chat_id].get("step", None)
+
+    try:
+        if step == "awaiting_source":
+            file_id = message.photo.file_id
+            source_image_path = f"{chat_id}_source.jpg"
+            user_data[chat_id]["source_image"] = download_file(client, file_id, source_image_path)
+            user_data[chat_id]["step"] = "awaiting_target"
+            client.send_message(chat_id, "Great! Now send the target image (destination face).")
+
+        elif step == "awaiting_target":
+            if "source_image" not in user_data[chat_id]:
+                client.send_message(chat_id, "Source image is missing. Please restart with /start.")
+                reset_user_data(chat_id)
                 return
 
-            try:
-                result_path = process_face_swap(source_file, target_file)
+            file_id = message.photo.file_id
+            target_image_path = f"{chat_id}_target.jpg"
+            user_data[chat_id]["target_image"] = download_file(client, file_id, target_image_path)
+            client.send_message(chat_id, "Processing your request, please wait...")
 
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                response = {"result_file": result_path}
-                self.wfile.write(json.dumps(response).encode())
-            except Exception as e:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(str(e).encode())
+            # Perform Face Swap
+            while True:
+                try:
+                    client_api = get_client()
+                    source_file = user_data[chat_id]["source_image"]
+                    target_file = user_data[chat_id]["target_image"]
 
-# Run the server
-def run(server_class=HTTPServer, handler_class=RequestHandler, port=8000):
-    server_address = ("", port)
-    httpd = server_class(server_address, handler_class)
-    print(f"Starting server on port {port}...")
-    httpd.serve_forever()
+                    result = client_api.predict(
+                        source_file=file(source_file),
+                        target_file=file(target_file),
+                        doFaceEnhancer=True,
+                        api_name="/predict"
+                    )
 
-if __name__ == "__main__":
-    run()
+                    # Upload the swapped image to Catbox
+                    swapped_image_url = upload_to_catbox(result)
+
+                    # Send the swapped image back to the user
+                    client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
+                    break
+
+                except Exception as e:
+                    client.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
+                    switch_client()  # Switch to the next API
+
+            cleanup_files(chat_id)
+            reset_user_data(chat_id)
+
+        else:
+            client.send_message(chat_id, "Invalid step. Please restart with /start.")
+            reset_user_data(chat_id)
+
+    except Exception as e:
+        client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
+        reset_user_data(chat_id)
+
+def reset_user_data(chat_id):
+    if chat_id in user_data:
+        user_data.pop(chat_id, None)
+
+def cleanup_files(chat_id):
+    if chat_id in user_data:
+        for key in ["source_image", "target_image"]:
+            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
+                os.remove(user_data[chat_id][key])
+
+app.run()
