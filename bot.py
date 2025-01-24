@@ -15,7 +15,7 @@ app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BO
 # List of Gradio Clients for Face Swap APIs
 api_clients = [
     "Kaliboy0012/face-swapm",
-    "Jonny001/Image-Face-Swap",
+    "Jonny0101/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
 current_client_index = 0
