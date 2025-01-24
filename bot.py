@@ -16,7 +16,7 @@ app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BO
 api_clients = [
     "Kaliboy0012/face-swapm",
     "Jonny0101/Image-Face-Swap",
-    "ovi054/face-swap-pro"
+    "kmuti/face-swap"
 ]
 current_client_index = 0
 user_data = {}
