@@ -1,44 +1,46 @@
-import telebot
-from telebot.async_telebot import AsyncTeleBot  # Asynchronous TeleBot
-import aiohttp
-import aiofiles
-from gradio_client import Client, file
 import os
 import asyncio
+from telebot.async_telebot import AsyncTeleBot
+from gradio_client import Client, file
+import aiofiles
+import aiohttp
 
 # Telegram Bot Token
-BOT_TOKEN = "7844051995:AAG0yvKGMjwHCajxDmzN6O47rcjd4SOzJOw"  # Replace with your token
+BOT_TOKEN = "7844051995:AAG0yvKGMjwHCajxDmzN6O47rcjd4SOzJOw"  # Replace with your bot token
 bot = AsyncTeleBot(BOT_TOKEN)
 
 # Admin Chat ID
 ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
 
-# List of Gradio Clients
+# Gradio API Clients
 api_clients = [
     "Kaliboy002/face-swapm",
     "Jonny001/Image-Face-Swap",
-    # Add more API clients here...
+    "ovi054/face-swap-pro",
+    "mrbeliever/Face-Swapper",
+    "Alibrown/Advanced-Face-Swaper",
+    # Add more APIs if needed...
 ]
 
 current_client_index = 0
-user_data = {}  # Temporary storage for user data
-queue = asyncio.Queue()  # Async processing queue
+user_data = {}
+queue = asyncio.Queue()
 
 
+# Function to get the current Gradio client
 def get_client():
-    """Get the current Gradio client."""
     global current_client_index
     return Client(api_clients[current_client_index])
 
 
+# Function to switch to the next Gradio client
 def switch_client():
-    """Switch to the next API client."""
     global current_client_index
     current_client_index = (current_client_index + 1) % len(api_clients)
 
 
+# Function to download a file from Telegram
 async def download_file(file_id, save_as):
-    """Asynchronously download a file from Telegram."""
     try:
         file_info = await bot.get_file(file_id)
         file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
@@ -47,44 +49,46 @@ async def download_file(file_id, save_as):
                 if response.status == 200:
                     async with aiofiles.open(save_as, "wb") as f:
                         await f.write(await response.read())
+                else:
+                    raise Exception(f"Failed to download file: {response.status}")
     except Exception as e:
-        raise Exception(f"Failed to download file: {e}")
+        raise Exception(f"Error in downloading file: {e}")
 
 
-async def upload_to_catbox(file_path):
-    """Asynchronously upload a file to Catbox."""
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with aiofiles.open(file_path, "rb") as f:
-                response = await session.post(
-                    "https://catbox.moe/user/api.php",
-                    data={"reqtype": "fileupload"},
-                    files={"fileToUpload": await f.read()},
-                )
-                response.raise_for_status()
-                return (await response.text()).strip()
-    except Exception as e:
-        raise Exception(f"Failed to upload file to Catbox: {e}")
+# Function to handle face swap with Gradio API
+async def face_swap(source_path, target_path):
+    while True:
+        try:
+            client = get_client()
+            result = client.predict(
+                source_file=file(source_path),
+                target_file=file(target_path),
+                doFaceEnhancer=True,
+                api_name="/predict",
+            )
+            return result  # Path to the swapped file
+        except Exception as e:
+            switch_client()
+            continue
 
 
+# Start command
 @bot.message_handler(commands=["start"])
 async def start(message):
-    """Handle the /start command."""
     chat_id = message.chat.id
     user_data[chat_id] = {"step": "awaiting_source"}
     await bot.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
 
 
+# Handle photos sent by the user
 @bot.message_handler(content_types=["photo"])
 async def handle_photo(message):
-    """Handle photos sent by the user."""
     chat_id = message.chat.id
-
     if chat_id not in user_data:
-        await bot.send_message(chat_id, "Please start the bot using /start.")
+        await bot.send_message(chat_id, "Please start with /start.")
         return
 
-    step = user_data[chat_id].get("step", None)
+    step = user_data[chat_id].get("step")
 
     try:
         if step == "awaiting_source":
@@ -93,16 +97,18 @@ async def handle_photo(message):
             await download_file(file_id, source_image)
             user_data[chat_id]["source_image"] = source_image
             user_data[chat_id]["step"] = "awaiting_target"
-            await bot.send_message(chat_id, "Great! Now send the target image (destination face).")
+            await bot.send_message(chat_id, "Got the source image! Now send the target image (destination face).")
 
         elif step == "awaiting_target":
             file_id = message.photo[-1].file_id
             target_image = f"{chat_id}_target.jpg"
             await download_file(file_id, target_image)
             user_data[chat_id]["target_image"] = target_image
-            await bot.send_message(chat_id, "Your request is being processed. Please wait...")
+            user_data[chat_id]["step"] = "processing"
 
-            # Add task to queue
+            await bot.send_message(chat_id, "Processing your request. Please wait...")
+
+            # Add the task to the queue for processing
             await queue.put((chat_id, user_data[chat_id]))
 
     except Exception as e:
@@ -110,59 +116,47 @@ async def handle_photo(message):
         reset_user_data(chat_id)
 
 
+# Process the face swap queue
 async def process_queue():
-    """Asynchronously process the face swap queue."""
     while True:
         chat_id, data = await queue.get()
         try:
-            client = get_client()
-            result = client.predict(
-                source_file=file(data["source_image"]),
-                target_file=file(data["target_image"]),
-                doFaceEnhancer=True,
-                api_name="/predict"
-            )
+            source_path = data["source_image"]
+            target_path = data["target_image"]
 
-            swapped_image_url = await upload_to_catbox(result)
+            # Perform the face swap
+            swapped_image_path = await face_swap(source_path, target_path)
 
-            # Send result to the user
-            async with aiofiles.open(result, "rb") as swapped_file:
-                await bot.send_photo(chat_id, swapped_file, caption=f"Face-swapped image: {swapped_image_url}")
+            # Send the result back to the user
+            async with aiofiles.open(swapped_image_path, "rb") as swapped_file:
+                await bot.send_photo(chat_id, swapped_file)
 
-        except Exception as e:
-            await bot.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
-            switch_client()
-
-        finally:
-            # Clean up files and reset user data
+            # Clean up files
             cleanup_files(chat_id)
+        except Exception as e:
+            await bot.send_message(ADMIN_CHAT_ID, f"Error during face swap for {chat_id}: {e}")
+            await bot.send_message(chat_id, "An error occurred during processing. Please try again.")
+        finally:
             reset_user_data(chat_id)
             queue.task_done()
 
 
+# Clean up temporary files
 def cleanup_files(chat_id):
-    """Clean up temporary files."""
-    if chat_id in user_data:
-        for key in ["source_image", "target_image"]:
-            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
-                os.remove(user_data[chat_id][key])
+    files_to_remove = ["source_image", "target_image"]
+    for key in files_to_remove:
+        if key in user_data.get(chat_id, {}) and os.path.exists(user_data[chat_id][key]):
+            os.remove(user_data[chat_id][key])
 
 
+# Reset user data
 def reset_user_data(chat_id):
-    """Reset user data."""
     if chat_id in user_data:
         user_data.pop(chat_id, None)
 
 
-async def main():
-    """Main entry point to start the bot and queue processor."""
-    # Start the queue processing task
-    asyncio.create_task(process_queue())
+# Start processing the queue
+asyncio.create_task(process_queue())
 
-    # Run the bot
-    await bot.infinity_polling()
-
-
-# Start the event loop
-if __name__ == "__main__":
-    asyncio.run(main())
+# Run the bot
+bot.infinity_polling()
