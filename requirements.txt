@@ -2,7 +2,3 @@ tgcrypto
 pyrogram
 requests
 gradio_client
-aiohttp
-aiofiles
-python-dotenv
-telethon
