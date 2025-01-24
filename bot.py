@@ -7,7 +7,7 @@ import asyncio
 
 # Your Telegram bot details
 API_ID = '15787995'  # Get your API ID from https://my.telegram.org/auth
-API_HASH = 'e51a3154d2e0c45e5ed70251d68382de'  # Get your API Hash from https://my.telegram.org/auth
+API_HASH = '7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w'  # Get your API Hash from https://my.telegram.org/auth
 BOT_TOKEN = "7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w"  # Replace with your Telegram bot token
 
 # Create the Telegram Client
@@ -160,11 +160,6 @@ def cleanup_files(chat_id):
             if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
                 os.remove(user_data[chat_id][key])
 
-# Run the bot
-async def main():
-    await client.start()
-    await client.run_until_disconnected()
-
-# Run the asyncio loop
+# Run the bot (using Telethon's built-in loop management)
 if __name__ == "__main__":
-    asyncio.run(main())
+    client.run_until_disconnected()
