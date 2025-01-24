@@ -3,7 +3,7 @@ import requests
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
 
-# Telegram Bot Token and API Information
+# Teleتgram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
 BOT_TOKEN = "7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w"  # Replace with your Telegram Bot Token
