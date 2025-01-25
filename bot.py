@@ -61,7 +61,7 @@ async def start(client, message):
         [InlineKeyboardButton("Check", callback_data="check_joined")]
     ]
 
-    client.send_message(
+    await client.send_message(
         chat_id,
         "Welcome to the Face Swap Bot! You need to join the channel to continue. Please click 'Join Channel' to join the channel and then click 'Check'.",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -85,10 +85,10 @@ async def check_joined(client, callback_query):
         await client.send_message(chat_id, "You have not joined the channel. Please join the channel first and then click 'Check'.")
         
 @app.on_message(filters.photo)
-def handle_photo(client, message):
+async def handle_photo(client, message):
     chat_id = message.chat.id
     if chat_id not in user_data:
-        client.send_message(chat_id, "Please start the bot using /start.")
+        await client.send_message(chat_id, "Please start the bot using /start.")
         return
 
     step = user_data[chat_id].get("step", None)
@@ -99,18 +99,18 @@ def handle_photo(client, message):
             source_image_path = f"{chat_id}_source.jpg"
             user_data[chat_id]["source_image"] = download_file(client, file_id, source_image_path)
             user_data[chat_id]["step"] = "awaiting_target"
-            client.send_message(chat_id, "Great! Now send the target image (destination face).")
+            await client.send_message(chat_id, "Great! Now send the target image (destination face).")
 
         elif step == "awaiting_target":
             if "source_image" not in user_data[chat_id]:
-                client.send_message(chat_id, "Source image is missing. Please restart with /start.")
+                await client.send_message(chat_id, "Source image is missing. Please restart with /start.")
                 reset_user_data(chat_id)
                 return
 
             file_id = message.photo.file_id
             target_image_path = f"{chat_id}_target.jpg"
             user_data[chat_id]["target_image"] = download_file(client, file_id, target_image_path)
-            client.send_message(chat_id, "Processing your request, please wait...")
+            await client.send_message(chat_id, "Processing your request, please wait...")
 
             # Perform Face Swap
             while True:
@@ -130,22 +130,22 @@ def handle_photo(client, message):
                     swapped_image_url = upload_to_catbox(result)
 
                     # Send the swapped image back to the user
-                    client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
+                    await client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
                     break
 
                 except Exception as e:
-                    client.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
+                    await client.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
                     switch_client()  # Switch to the next API
 
             cleanup_files(chat_id)
             reset_user_data(chat_id)
 
         else:
-            client.send_message(chat_id, "Invalid step. Please restart with /start.")
+            await client.send_message(chat_id, "Invalid step. Please restart with /start.")
             reset_user_data(chat_id)
 
     except Exception as e:
-        client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
+        await client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
         reset_user_data(chat_id)
 
 def reset_user_data(chat_id):
