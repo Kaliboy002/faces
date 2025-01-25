@@ -3,6 +3,7 @@ import requests
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
 from pyrogram.errors import UserNotParticipant
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Telegram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
@@ -75,14 +76,37 @@ def start(client, message):
     if mandatory_subscription_enabled:
         if not check_subscription(client, chat_id):
             join_message = (
-                f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\n"
-                "After joining, click /start again."
+                f"You must join our channel to use this bot: @{MANDATORY_CHANNEL}\n"
+                "After joining, click the 'Check Membership' button below."
             )
-            client.send_message(chat_id, join_message)
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Join Channel", url=f"https://t.me/{MANDATORY_CHANNEL}")],
+                [InlineKeyboardButton("Check Membership", callback_data="check_membership")]
+            ])
+            client.send_message(chat_id, join_message, reply_markup=buttons)
             return
 
     user_data[chat_id] = {"step": "awaiting_source"}
     client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
+
+
+@app.on_callback_query(filters.regex("check_membership"))
+def check_membership(client, callback_query):
+    chat_id = callback_query.from_user.id
+
+    if mandatory_subscription_enabled:
+        if check_subscription(client, chat_id):
+            # If subscribed, allow access
+            client.answer_callback_query(callback_query.id, "You are subscribed! You can now use the bot.")
+            user_data[chat_id] = {"step": "awaiting_source"}
+            client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
+        else:
+            # If not subscribed, show a warning popup
+            client.answer_callback_query(
+                callback_query.id,
+                "You are not subscribed! Please join the channel first and click 'Check Membership' again.",
+                show_alert=True
+            )
 
 
 @app.on_message(filters.photo)
@@ -93,10 +117,14 @@ def handle_photo(client, message):
     if mandatory_subscription_enabled:
         if not check_subscription(client, chat_id):
             join_message = (
-                f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\n"
-                "After joining, click /start again."
+                f"You must join our channel to use this bot: @{MANDATORY_CHANNEL}\n"
+                "After joining, click the 'Check Membership' button below."
             )
-            client.send_message(chat_id, join_message)
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Join Channel", url=f"https://t.me/{MANDATORY_CHANNEL}")],
+                [InlineKeyboardButton("Check Membership", callback_data="check_membership")]
+            ])
+            client.send_message(chat_id, join_message, reply_markup=buttons)
             return
 
     if chat_id not in user_data:
