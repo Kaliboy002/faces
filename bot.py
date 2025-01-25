@@ -20,8 +20,8 @@ MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.
 DB_NAME = "face_swap_bot"
 COLLECTION_NAME = "users"
 mongo_client = MongoClient(MONGO_URI)
-db = mongo_client[DB_NAME]
-users_collection = db[COLLECTION_NAME]
+db = mongo_client[shah]
+users_collection = db[shm]
 
 # Face Swap API Configuration
 api_clients = [
