@@ -17,11 +17,11 @@ ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
 
 # MongoDB Configuration
 MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"  # Replace with your MongoDB URI
-DB_NAME = "face_swap_bot"
-COLLECTION_NAME = "users"
+DB_NAME = "shah"
+COLLECTION_NAME = "shm"
 mongo_client = MongoClient(MONGO_URI)
-db = mongo_client[shah]
-users_collection = db[shm]
+db = mongo_client[DB_NAME]
+users_collection = db[COLLECTION_NAME]
 
 # Face Swap API Configuration
 api_clients = [
