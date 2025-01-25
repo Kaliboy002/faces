@@ -3,6 +3,7 @@ import time
 import requests
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Teleتgram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
@@ -65,21 +66,25 @@ def cleanup_files(chat_id):
                 os.remove(user_data[chat_id][key])
 
 def get_language_text(chat_id, key):
-    language = language_data.get(chat_id, "en")
+    language = language_data.get(chat_id, "fa")  # Default to Persian
     if language == "fa":
         return {
             "welcome": "خوش آمدید به ربات تغییر چهره! لطفاً تصویر منبع را ارسال کنید (چهره برای تغییر).",
             "await_target": "عالی! حالا تصویر هدف (چهره مقصد) را ارسال کنید.",
             "processing": "در حال پردازش درخواست شما، لطفاً صبور باشید...",
             "swap_complete": "تصویر تغییر چهره شده: ",
-            "wait_for_cooldown": "لطفاً تا تکمیل پردازش تصویر صبر کنید."
+            "wait_for_cooldown": "لطفاً تا تکمیل پردازش تصویر صبر کنید.",
+            "image_received": "تصویر دریافت شده است، لطفاً منتظر پردازش بمانید.",
+            "start_message": "لطفاً ابتدا زبان خود را انتخاب کنید:\n1. انگلیسی\n2. فارسی"
         }.get(key, "")
     return {
         "welcome": "Welcome to the Face Swap Bot! Please send the source image (face to swap).",
         "await_target": "Great! Now send the target image (destination face).",
         "processing": "Processing your request, please wait...",
         "swap_complete": "Face-swapped image: ",
-        "wait_for_cooldown": "Please wait until the cooldown period is over."
+        "wait_for_cooldown": "Please wait until the cooldown period is over.",
+        "image_received": "Image received, please wait for processing.",
+        "start_message": "Please first select your language:\n1. English\n2. فارسی"
     }.get(key, "")
 
 @app.on_message(filters.command("start"))
@@ -88,13 +93,13 @@ def start(client, message):
     user_data[chat_id] = {"step": "awaiting_source"}
     client.send_message(
         chat_id,
-        "Select language:\n1. English\n2. فارسی",
-        reply_markup={
-            "inline_keyboard": [
-                [{"text": "English", "callback_data": "lang_en"}],
-                [{"text": "فارسی", "callback_data": "lang_fa"}]
+        get_language_text(chat_id, "start_message"),
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("English", callback_data="lang_en")],
+                [InlineKeyboardButton("فارسی", callback_data="lang_fa")]
             ]
-        }
+        )
     )
 
 @app.on_callback_query(filters.regex("lang_"))
@@ -115,12 +120,12 @@ def handle_photo(client, message):
         if remaining_time > 0:
             client.send_message(
                 chat_id,
-                f"You should wait {int(remaining_time)} seconds before submitting another image."
+                f"{get_language_text(chat_id, 'wait_for_cooldown')} {int(remaining_time)} seconds."
             )
             return
 
     if chat_id not in user_data:
-        client.send_message(chat_id, "Please start the bot using /start.")
+        client.send_message(chat_id, get_language_text(chat_id, "start_message"))
         return
 
     step = user_data[chat_id].get("step", None)
