@@ -1,64 +1,50 @@
 import os
-import time
-from datetime import datetime, timedelta
 import requests
-from gradio_client import Client, file
 from pymongo import MongoClient
 from pyrogram import Client as PyroClient, filters
-from pyrogram.errors import UserNotParticipant
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from gradio_client import Client, file
 
-# Telegram Bot Configuration
+# Telegram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
 BOT_TOKEN = "7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w"  # Replace with your Telegram Bot Token
-MANDATORY_CHANNEL = "Kali_Linux_BOTS"  # Replace with your channel username
 ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
+CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with your channel username (e.g., @YourChannel)
 
-# MongoDB Configuration
-MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"  # Replace with your MongoDB URI
-DB_NAME = "shah"
-COLLECTION_NAME = "shm"
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client[DB_NAME]
-users_collection = db[COLLECTION_NAME]
+# MongoDB setup
+client = MongoClient("mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&")  # Replace with your MongoDB URI
+db = client["shah"]
+users_collection = db["shm"]
 
-# Face Swap API Configuration
+# Pyrogram Bot Initialization
+app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+# List of Gradio Clients for Face Swap APIs
 api_clients = [
     "Kaliboy0012/face-swapm",
     "Jonny0101/Image-Face-Swap",
     "kmuti/face-swap"
 ]
 current_client_index = 0
+user_data = {}
 
-# Bot Settings
-cooldown_time = 60  # Cooldown in seconds
-processing_queue = []
-mandatory_subscription_enabled = True  # Default subscription enforcement
-
-# Initialize Pyrogram Bot
-app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
-# Helper Functions
 def get_client():
-    """Returns the current Gradio API client."""
     global current_client_index
     return Client(api_clients[current_client_index])
 
 def switch_client():
-    """Switches to the next Gradio API client."""
     global current_client_index
     current_client_index = (current_client_index + 1) % len(api_clients)
 
 def download_file(client, file_id, save_as):
-    """Downloads a file from Telegram."""
     try:
-        return client.download_media(file_id, file_name=save_as)
+        file_path = client.download_media(file_id, file_name=save_as)
+        return file_path
     except Exception as e:
         raise Exception(f"Failed to download file: {e}")
 
 def upload_to_catbox(file_path):
-    """Uploads a file to Catbox and returns the URL."""
     try:
         with open(file_path, "rb") as f:
             response = requests.post(
@@ -71,126 +57,121 @@ def upload_to_catbox(file_path):
     except Exception as e:
         raise Exception(f"Failed to upload file to Catbox: {e}")
 
-def check_subscription(client, chat_id):
-    """Checks if the user is subscribed to the mandatory channel."""
+# Check if user is a member of the channel
+async def check_membership(client, chat_id):
     try:
-        member = client.get_chat_member(MANDATORY_CHANNEL, chat_id)
+        member = await client.get_chat_member(CHANNEL_USERNAME, chat_id)
         return member.status in ["member", "administrator", "creator"]
-    except UserNotParticipant:
-        return False
     except Exception:
         return False
 
-def is_user_allowed(chat_id):
-    """Checks if the user is allowed to make a new request (cooldown check)."""
-    user = users_collection.find_one({"_id": chat_id})
-    if not user:
-        return True  # Allow new users
-
-    cooldown_end = user.get("cooldown_end")
-    if cooldown_end and cooldown_end > datetime.utcnow():
-        return False  # Still in cooldown
-    return True
-
-def update_cooldown(chat_id):
-    """Updates the cooldown for a user."""
-    cooldown_end = datetime.utcnow() + timedelta(seconds=cooldown_time)
-    users_collection.update_one(
-        {"_id": chat_id},
-        {"$set": {"cooldown_end": cooldown_end}},
-        upsert=True
-    )
-
-def cleanup_files(chat_id):
-    """Cleans up temporary files for a user."""
-    for key in ["source_image", "target_image"]:
-        file_path = f"{chat_id}_{key}.jpg"
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
+# Send the start message with buttons
 @app.on_message(filters.command("start"))
-def start(client, message):
-    """Handles the /start command."""
+async def start(client, message):
     chat_id = message.chat.id
+    user_data[chat_id] = {"step": "awaiting_source"}
 
-    # Save user to database
-    users_collection.update_one(
-        {"_id": chat_id},
-        {"$set": {"joined_channel": False, "cooldown_end": None}},
-        upsert=True
-    )
-
-    # Check subscription
-    if mandatory_subscription_enabled:
-        if not check_subscription(client, chat_id):
-            join_message = (
-                f"You must join our channel to use this bot: @{MANDATORY_CHANNEL}\n"
-                "After joining, click the 'Check Membership' button below."
-            )
-            buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join Channel", url=f"https://t.me/{MANDATORY_CHANNEL}")],
-                [InlineKeyboardButton("Check Membership", callback_data="check_membership")]
-            ])
-            client.send_message(chat_id, join_message, reply_markup=buttons)
-            return
-
-    client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
-    users_collection.update_one({"_id": chat_id}, {"$set": {"joined_channel": True}})
-
-@app.on_callback_query(filters.regex("check_membership"))
-def check_membership(client, callback_query):
-    """Handles the 'Check Membership' button."""
-    chat_id = callback_query.from_user.id
-    if check_subscription(client, chat_id):
-        users_collection.update_one({"_id": chat_id}, {"$set": {"joined_channel": True}})
-        client.answer_callback_query(callback_query.id, "You are subscribed! You can now use the bot.")
-        client.send_message(chat_id, "You are subscribed! Please send the source image (face to swap).")
-    else:
-        client.answer_callback_query(
-            callback_query.id,
-            "You are not subscribed! Please join the channel first and click 'Check Membership' again.",
-            show_alert=True
-        )
-
-@app.on_message(filters.photo)
-def handle_photo(client, message):
-    """Handles photo uploads."""
-    chat_id = message.chat.id
-
-    # Check subscription
-    user = users_collection.find_one({"_id": chat_id})
-    if mandatory_subscription_enabled and not user.get("joined_channel", False):
-        join_message = (
-            f"You must join our channel to use this bot: @{MANDATORY_CHANNEL}\n"
-            "After joining, click the 'Check Membership' button below."
-        )
-        buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Join Channel", url=f"https://t.me/{MANDATORY_CHANNEL}")],
+    # Check membership status in channel
+    is_member = await check_membership(client, chat_id)
+    if not is_member:
+        # Send message with "Join Channel" and "Check Membership" buttons
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
             [InlineKeyboardButton("Check Membership", callback_data="check_membership")]
         ])
-        client.send_message(chat_id, join_message, reply_markup=buttons)
+        await client.send_message(chat_id, "Welcome to the Face Swap Bot! Please join the channel to use the bot.", reply_markup=keyboard)
+    else:
+        # If user is already a member, proceed to the next step
+        await client.send_message(chat_id, "You are already a member of the channel. Please send the source image to begin.")
+
+@app.on_callback_query(filters.regex("check_membership"))
+async def check_membership_callback(client, callback_query):
+    chat_id = callback_query.message.chat.id
+    is_member = await check_membership(client, chat_id)
+
+    if is_member:
+        await callback_query.message.edit("You are a member of the channel. Now you can start using the bot. Please send the source image.")
+        user_data[chat_id]["step"] = "awaiting_source"
+    else:
+        await callback_query.message.edit("You are not a member of the channel. Please join the channel first.")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("Check Membership", callback_data="check_membership")]
+        ])
+        await callback_query.message.edit("You are not a member of the channel. Please join and then check again.", reply_markup=keyboard)
+
+@app.on_message(filters.photo)
+async def handle_photo(client, message):
+    chat_id = message.chat.id
+    if chat_id not in user_data:
+        await client.send_message(chat_id, "Please start the bot using /start.")
         return
 
-    # Cooldown check
-    if not is_user_allowed(chat_id):
-        remaining_time = (user["cooldown_end"] - datetime.utcnow()).seconds
-        client.send_message(chat_id, f"Please wait {remaining_time} seconds before your next request.")
-        return
+    step = user_data[chat_id].get("step", None)
 
-    # Add to processing queue
-    processing_queue.append(chat_id)
-    position = len(processing_queue)
-    client.send_message(chat_id, f"Your request is in queue. Position: {position}. Please wait.")
+    try:
+        if step == "awaiting_source":
+            file_id = message.photo.file_id
+            source_image_path = f"{chat_id}_source.jpg"
+            user_data[chat_id]["source_image"] = download_file(client, file_id, source_image_path)
+            user_data[chat_id]["step"] = "awaiting_target"
+            await client.send_message(chat_id, "Great! Now send the target image (destination face).")
 
-    while processing_queue[0] != chat_id:
-        time.sleep(1)  # Wait for the user's turn
+        elif step == "awaiting_target":
+            if "source_image" not in user_data[chat_id]:
+                await client.send_message(chat_id, "Source image is missing. Please restart with /start.")
+                reset_user_data(chat_id)
+                return
 
-    # Perform face swap
-    client.send_message(chat_id, "Processing your request...")
-    update_cooldown(chat_id)
-    processing_queue.pop(0)
+            file_id = message.photo.file_id
+            target_image_path = f"{chat_id}_target.jpg"
+            user_data[chat_id]["target_image"] = download_file(client, file_id, target_image_path)
+            await client.send_message(chat_id, "Processing your request, please wait...")
 
-    # Face swap logic goes here...
-    client.send_message(chat_id, "Face swap complete! Enjoy your image.")
+            # Perform Face Swap
+            while True:
+                try:
+                    client_api = get_client()
+                    source_file = user_data[chat_id]["source_image"]
+                    target_file = user_data[chat_id]["target_image"]
+
+                    result = client_api.predict(
+                        source_file=file(source_file),
+                        target_file=file(target_file),
+                        doFaceEnhancer=True,
+                        api_name="/predict"
+                    )
+
+                    # Upload the swapped image to Catbox
+                    swapped_image_url = upload_to_catbox(result)
+
+                    # Send the swapped image back to the user
+                    await client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
+                    break
+
+                except Exception as e:
+                    await client.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
+                    switch_client()  # Switch to the next API
+
+            cleanup_files(chat_id)
+            reset_user_data(chat_id)
+
+        else:
+            await client.send_message(chat_id, "Invalid step. Please restart with /start.")
+            reset_user_data(chat_id)
+
+    except Exception as e:
+        await client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
+        reset_user_data(chat_id)
+
+def reset_user_data(chat_id):
+    if chat_id in user_data:
+        user_data.pop(chat_id, None)
+
+def cleanup_files(chat_id):
+    if chat_id in user_data:
+        for key in ["source_image", "target_image"]:
+            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
+                os.remove(user_data[chat_id][key])
 
 app.run()
