@@ -13,7 +13,7 @@ ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
 CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with your channel username (e.g., @YourChannel)
 
 # MongoDB setup
-client = MongoClient("mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&")  # Replace with your MongoDB URI
+client = MongoClient("mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true0")  # Replace with your MongoDB URI
 db = client["shah"]
 users_collection = db["shm"]
 
