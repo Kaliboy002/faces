@@ -24,7 +24,7 @@ user_data = {}
 
 # Force Subscribe Configuration
 class Config:
-    FORCE_SUBSCRIBE = False  # Change to True to force users to subscribe
+    FORCE_SUBSCRIBE = True  # Change to True to force users to subscribe
     CHANNELS = ["Kali_Linux_BOTS"]  # Replace with your actual channel usernames
 
 def get_client():
