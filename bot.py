@@ -9,7 +9,7 @@ API_ID = "15787995"  # Replace with your API ID
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
 BOT_TOKEN = "7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w"  # Replace with your Telegram Bot Token
 ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
-CHANNEL_USERNAME = "@Kali_Linux_BOTS"  # Replace with your channel username (without @)
+CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with your channel username (without @)
 
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
