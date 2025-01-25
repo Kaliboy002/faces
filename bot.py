@@ -1,14 +1,15 @@
-
 import os
 import requests
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
+from pyrogram.errors import UserNotParticipant
 
-# Teleتgram Bot Token and API Information
+# Telegram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
 BOT_TOKEN = "7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w"  # Replace with your Telegram Bot Token
-ADMIN_CHAT_ID = 7046488481  # Replhace with your Telegram user ID
+ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
+MANDATORY_CHANNEL = "Kali_Linux_BOTS"  # Replace with your channel's username (without @)
 
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -22,13 +23,16 @@ api_clients = [
 current_client_index = 0
 user_data = {}
 
+
 def get_client():
     global current_client_index
     return Client(api_clients[current_client_index])
 
+
 def switch_client():
     global current_client_index
     current_client_index = (current_client_index + 1) % len(api_clients)
+
 
 def download_file(client, file_id, save_as):
     try:
@@ -36,6 +40,7 @@ def download_file(client, file_id, save_as):
         return file_path
     except Exception as e:
         raise Exception(f"Failed to download file: {e}")
+
 
 def upload_to_catbox(file_path):
     try:
@@ -50,15 +55,39 @@ def upload_to_catbox(file_path):
     except Exception as e:
         raise Exception(f"Failed to upload file to Catbox: {e}")
 
+
+def check_subscription(client, chat_id):
+    try:
+        member = client.get_chat_member(MANDATORY_CHANNEL, chat_id)
+        return member.status in ["member", "administrator", "creator"]
+    except UserNotParticipant:
+        return False
+
+
 @app.on_message(filters.command("start"))
 def start(client, message):
     chat_id = message.chat.id
+
+    # Check if the user is subscribed to the mandatory channel
+    if not check_subscription(client, chat_id):
+        join_message = f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\nAfter joining, click /start."
+        client.send_message(chat_id, join_message)
+        return
+
     user_data[chat_id] = {"step": "awaiting_source"}
     client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
+
 
 @app.on_message(filters.photo)
 def handle_photo(client, message):
     chat_id = message.chat.id
+
+    # Check if the user is subscribed to the mandatory channel
+    if not check_subscription(client, chat_id):
+        join_message = f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\nAfter joining, click /start."
+        client.send_message(chat_id, join_message)
+        return
+
     if chat_id not in user_data:
         client.send_message(chat_id, "Please start the bot using /start.")
         return
@@ -120,14 +149,17 @@ def handle_photo(client, message):
         client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
         reset_user_data(chat_id)
 
+
 def reset_user_data(chat_id):
     if chat_id in user_data:
         user_data.pop(chat_id, None)
+
 
 def cleanup_files(chat_id):
     if chat_id in user_data:
         for key in ["source_image", "target_image"]:
             if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
                 os.remove(user_data[chat_id][key])
+
 
 app.run()
