@@ -22,6 +22,7 @@ api_clients = [
 ]
 current_client_index = 0
 user_data = {}
+mandatory_subscription_enabled = True  # Default is enabled
 
 
 def get_client():
@@ -62,17 +63,23 @@ def check_subscription(client, chat_id):
         return member.status in ["member", "administrator", "creator"]
     except UserNotParticipant:
         return False
+    except Exception:
+        return False
 
 
 @app.on_message(filters.command("start"))
 def start(client, message):
     chat_id = message.chat.id
 
-    # Check if the user is subscribed to the mandatory channel
-    if not check_subscription(client, chat_id):
-        join_message = f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\nAfter joining, click /start."
-        client.send_message(chat_id, join_message)
-        return
+    # Check subscription only if it's enabled
+    if mandatory_subscription_enabled:
+        if not check_subscription(client, chat_id):
+            join_message = (
+                f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\n"
+                "After joining, click /start again."
+            )
+            client.send_message(chat_id, join_message)
+            return
 
     user_data[chat_id] = {"step": "awaiting_source"}
     client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
@@ -82,11 +89,15 @@ def start(client, message):
 def handle_photo(client, message):
     chat_id = message.chat.id
 
-    # Check if the user is subscribed to the mandatory channel
-    if not check_subscription(client, chat_id):
-        join_message = f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\nAfter joining, click /start."
-        client.send_message(chat_id, join_message)
-        return
+    # Check subscription only if it's enabled
+    if mandatory_subscription_enabled:
+        if not check_subscription(client, chat_id):
+            join_message = (
+                f"Please join our channel to use the bot: @{MANDATORY_CHANNEL}\n"
+                "After joining, click /start again."
+            )
+            client.send_message(chat_id, join_message)
+            return
 
     if chat_id not in user_data:
         client.send_message(chat_id, "Please start the bot using /start.")
@@ -148,6 +159,14 @@ def handle_photo(client, message):
     except Exception as e:
         client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
         reset_user_data(chat_id)
+
+
+@app.on_message(filters.command("toggle_subscribe") & filters.user(ADMIN_CHAT_ID))
+def toggle_subscription(client, message):
+    global mandatory_subscription_enabled
+    mandatory_subscription_enabled = not mandatory_subscription_enabled
+    status = "enabled" if mandatory_subscription_enabled else "disabled"
+    client.send_message(ADMIN_CHAT_ID, f"Mandatory subscription has been {status}.")
 
 
 def reset_user_data(chat_id):
