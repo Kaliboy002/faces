@@ -67,7 +67,13 @@ translations = {
         "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
         "cooldown": "⏳ Please wait {} seconds before next swap!",
         "invalid_input": "📸 Please send photos to face swap!",
-        "error": "⚠️ An error occurred. Please try again."
+        "error": "⚠️ An error occurred. Please try again.",
+        "not_joined_alert": "😐 You are not joined. You must join then click on verify.",
+        "welcome_caption": "Hi {username}, welcome to Face Swap Bot AI! Please send your main or source photo to proceed.",
+        "help_message": "Hi, how are you? You can use this bot for free.",
+        "back_button": "Back",
+        "change_lang": "Change Language",
+        "help_button": "Help"
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -81,7 +87,13 @@ translations = {
         "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
         "cooldown": "⏳ لطفا {} ثانیه دیگر انتظار دهید!",
         "invalid_input": "📸 لطفا عکس ارسال کنید!",
-        "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید."
+        "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید.",
+        "not_joined_alert": "😐 شما عضو نشده‌اید. باید عضو شوید و سپس روی تایید کلیک کنید.",
+        "welcome_caption": "سلام {username}، به بات جابه‌جایی چهره خوش آمدید! لطفا عکس اصلی خود را ارسال کنید.",
+        "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
+        "back_button": "بازگشت",
+        "change_lang": "تغییر زبان",
+        "help_button": "راهنما"
     }
 }
 
@@ -203,14 +215,8 @@ def start_handler(client, message):
         ]
     ])
 
-    # Check if language is already selected
-    if chat_id in user_data and 'lang' in user_data[chat_id]:
-        lang = user_data[chat_id]['lang']
-    else:
-        lang = 'en'  # default language
-
     # Send welcome message with language selection
-    app.send_message(chat_id, translations[lang]["welcome"], reply_markup=keyboard)
+    app.send_message(chat_id, translations["en"]["welcome"], reply_markup=keyboard)
 
 @app.on_callback_query(filters.regex("^lang_(en|fa)$"))
 def language_callback(client, callback):
@@ -225,16 +231,23 @@ def language_callback(client, callback):
     if not check_membership(user_id):
         show_mandatory_message(chat_id, lang)
     else:
-        user_data[chat_id]['step'] = 'awaiting_source'
-        app.send_message(chat_id, translations[lang]["source_image"])
+        send_welcome_message(chat_id, user_id, lang)
 
-@app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
-def toggle_mandatory(client, message):
-    cmd = message.command[0]
-    status = cmd == "on"
-    update_mandatory_status(status)
-    app.send_message(message.chat.id, 
-        f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
+def send_welcome_message(chat_id, user_id, lang):
+    # Welcome photo URL
+    photo_url = "https://files.catbox.moe/tv24yp.jpg"
+    username = app.get_users(user_id).first_name
+
+    # Welcome message with photo and buttons
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(translations[lang]["change_lang"], callback_data="change_lang")],
+        [InlineKeyboardButton(translations[lang]["help_button"], callback_data="help")]
+    ])
+    app.send_photo(
+        chat_id,
+        photo=photo_url,
+        caption=translations[lang]["welcome_caption"].format(username=username),
+        reply_markup=keyboard
     )
 
 @app.on_callback_query(filters.regex("^check_join$"))
@@ -245,19 +258,18 @@ def verify_join(client, callback):
 
     if check_membership(user_id):
         app.delete_messages(chat_id, user_data[chat_id]["mandatory_msg"])
-        user_data[chat_id]['step'] = 'awaiting_source'
-        app.send_message(chat_id, translations[lang]["verify_join"])
+        send_welcome_message(chat_id, user_id, lang)
     else:
         app.answer_callback_query(
             callback.id,
-            translations[lang]["mandatory_join"],
+            translations[lang]["not_joined_alert"],
             show_alert=True
         )
 
-@app.on_message(filters.command("language"))
-def change_language(client, message):
-    chat_id = message.chat.id
-    user_id = message.from_user.id
+@app.on_callback_query(filters.regex("^change_lang$"))
+def change_language_callback(client, callback):
+    chat_id = callback.message.chat.id
+    user_id = callback.from_user.id
 
     # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
@@ -268,6 +280,35 @@ def change_language(client, message):
     ])
 
     app.send_message(chat_id, translations[user_data.get(chat_id, {}).get('lang', 'en')]["select_lang"], reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex("^help$"))
+def help_callback(client, callback):
+    chat_id = callback.message.chat.id
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    # Help message with Back button
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
+    ])
+    app.send_message(chat_id, translations[lang]["help_message"], reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex("^back_to_welcome$"))
+def back_to_welcome_callback(client, callback):
+    chat_id = callback.message.chat.id
+    user_id = callback.from_user.id
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    # Send welcome message again
+    send_welcome_message(chat_id, user_id, lang)
+
+@app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
+def toggle_mandatory(client, message):
+    cmd = message.command[0]
+    status = cmd == "on"
+    update_mandatory_status(status)
+    app.send_message(message.chat.id, 
+        f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
+    )
 
 @app.on_message(filters.photo | filters.text)
 def main_handler(client, message):
