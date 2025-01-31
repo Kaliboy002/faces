@@ -2,14 +2,28 @@ import os
 import requests
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup  # Added for buttons
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pymongo import MongoClient
 
-# Telegram Bot Token and API Information
-API_ID = "15787995"  # Replace with your API ID
-API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
-BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"  # Replace with your Telegram Bot Token
-ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
-CHANNEL_USERNAME = "@Kali_Linux_BOTS"  # Replace with your channel username
+# MongoDB Configuration
+MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["shah"]
+settings_collection = db["bot_settings"]
+
+# Initialize default settings if not exists
+if not settings_collection.find_one({"_id": "mandatory_join"}):
+    settings_collection.insert_one({
+        "_id": "mandatory_join",
+        "enabled": True
+    })
+
+# Telegram Bot Configuration
+API_ID = "15787995"
+API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
+BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"
+ADMIN_CHAT_ID = 7046488481
+CHANNEL_USERNAME = "@Kali_Linux_BOTS"
 
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -22,6 +36,16 @@ api_clients = [
 ]
 current_client_index = 0
 user_data = {}
+
+def get_mandatory_status():
+    return settings_collection.find_one({"_id": "mandatory_join"})["enabled"]
+
+def update_mandatory_status(status: bool):
+    settings_collection.update_one(
+        {"_id": "mandatory_join"},
+        {"$set": {"enabled": status}},
+        upsert=True
+    )
 
 def get_client():
     global current_client_index
@@ -51,35 +75,53 @@ def upload_to_catbox(file_path):
     except Exception as e:
         raise Exception(f"Failed to upload file to Catbox: {e}")
 
-# Modified start command with mandatory join check
 @app.on_message(filters.command("start"))
 def start(client, message):
     chat_id = message.chat.id
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
-        [InlineKeyboardButton("Check", callback_data="check_join")]
-    ])
-    sent_message = message.reply_text(
-        "**Mandatory Join**\nYou must join our channel to use this bot!",
-        reply_markup=keyboard
-    )
-    user_data[chat_id] = {"mandatory_message_id": sent_message.id}
+    if get_mandatory_status():
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
+            [InlineKeyboardButton("Check", callback_data="check_join")]
+        ])
+        sent_message = message.reply_text(
+            "**Mandatory Join**\nYou must join our channel to use this bot!",
+            reply_markup=keyboard
+        )
+        user_data[chat_id] = {"mandatory_message_id": sent_message.id}
+    else:
+        user_data[chat_id] = {"step": "awaiting_source"}
+        message.reply_text("Welcome to the Face Swap Bot! Please send the source image (face to swap).")
 
-# Callback handler for join verification
+@app.on_message(filters.command("off") & filters.user(ADMIN_CHAT_ID))
+def disable_mandatory(client, message):
+    update_mandatory_status(False)
+    message.reply_text("✅ Mandatory channel join disabled. Users can now use the bot without joining.")
+
+@app.on_message(filters.command("on") & filters.user(ADMIN_CHAT_ID))
+def enable_mandatory(client, message):
+    update_mandatory_status(True)
+    message.reply_text("🔒 Mandatory channel join enabled. Users must join channel to use the bot.")
+
 @app.on_callback_query(filters.create(lambda _, __, query: query.data == "check_join"))
 def check_join(client, callback_query):
     chat_id = callback_query.message.chat.id
     user_id = callback_query.from_user.id
+    
+    if not get_mandatory_status():
+        client.answer_callback_query(
+            callback_query.id,
+            "ℹ️ Channel verification is currently disabled by admin.",
+            show_alert=True
+        )
+        return
+
     try:
-        # Check if user joined channel
         client.get_chat_member(CHANNEL_USERNAME, user_id)
         
-        # Delete mandatory message
         if chat_id in user_data and "mandatory_message_id" in user_data[chat_id]:
             client.delete_messages(chat_id, user_data[chat_id]["mandatory_message_id"])
             del user_data[chat_id]["mandatory_message_id"]
         
-        # Initialize normal bot flow
         user_data[chat_id] = {"step": "awaiting_source"}
         client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
         
@@ -92,7 +134,6 @@ def check_join(client, callback_query):
     finally:
         callback_query.answer()
 
-# Existing photo handling functions remain the same
 @app.on_message(filters.photo)
 def handle_photo(client, message):
     chat_id = message.chat.id
@@ -135,16 +176,13 @@ def handle_photo(client, message):
                         api_name="/predict"
                     )
 
-                    # Upload the swapped image to Catbox
                     swapped_image_url = upload_to_catbox(result)
-
-                    # Send the swapped image back to the user
                     client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
                     break
 
                 except Exception as e:
                     client.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
-                    switch_client()  # Switch to the next API
+                    switch_client()
 
             cleanup_files(chat_id)
             reset_user_data(chat_id)
@@ -167,4 +205,6 @@ def cleanup_files(chat_id):
             if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
                 os.remove(user_data[chat_id][key])
 
-app.run()
+if __name__ == "__main__":
+    print("🤖 FaceSwap Bot Started!")
+    app.run()
