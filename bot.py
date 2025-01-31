@@ -1,5 +1,7 @@
 import os
+import time
 import requests
+import threading
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -10,6 +12,7 @@ MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["shah"]
 settings_collection = db["bot_settings"]
+cooldown_collection = db["user_cooldowns"]
 
 # Initialize default settings
 if not settings_collection.find_one({"_id": "mandatory_join"}):
@@ -24,6 +27,7 @@ API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"
 ADMIN_CHAT_ID = 7046488481
 CHANNEL_USERNAME = "@Kali_Linux_BOTS"
+COOLDOWN_TIME = 80  # seconds
 
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -44,6 +48,20 @@ def update_mandatory_status(status: bool):
     settings_collection.update_one(
         {"_id": "mandatory_join"},
         {"$set": {"enabled": status}},
+        upsert=True
+    )
+
+def check_cooldown(user_id):
+    record = cooldown_collection.find_one({"_id": user_id})
+    if record and (time.time() - record["timestamp"]) < COOLDOWN_TIME:
+        remaining = int(COOLDOWN_TIME - (time.time() - record["timestamp"]))
+        return remaining
+    return 0
+
+def update_cooldown(user_id):
+    cooldown_collection.update_one(
+        {"_id": user_id},
+        {"$set": {"timestamp": time.time()}},
         upsert=True
     )
 
@@ -95,6 +113,21 @@ def show_mandatory_message(chat_id):
     )
     user_data[chat_id] = {"mandatory_msg": sent.id}
 
+def progress_updater(chat_id, message_id, start_time):
+    elapsed = 0
+    while elapsed < 30:  # Max 30 seconds progress
+        try:
+            progress = min(elapsed * 3, 100)  # Fake progress %
+            app.edit_message_text(
+                chat_id,
+                message_id,
+                f"⏳ Processing... {progress}%\nEstimated time: {30 - elapsed}s remaining"
+            )
+            time.sleep(5)
+            elapsed += 5
+        except:
+            break
+
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
     message.delete()
@@ -133,26 +166,42 @@ def verify_join(client, callback):
         )
 
 def process_face_swap(chat_id, source_path, target_path):
-    while True:
-        try:
-            api = get_client()
-            result = api.predict(
-                source_file=file(source_path),
-                target_file=file(target_path),
-                doFaceEnhancer=True,
-                api_name="/predict"
-            )
-            return upload_to_catbox(result)
-        except Exception as e:
-            app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
-            switch_client()
+    start_time = time.time()
+    progress_msg = app.send_message(chat_id, "⏳ Starting processing...")
+    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
+    thread.start()
+    
+    try:
+        while True:
+            try:
+                api = get_client()
+                result = api.predict(
+                    source_file=file(source_path),
+                    target_file=file(target_path),
+                    doFaceEnhancer=True,
+                    api_name="/predict"
+                )
+                result_url = upload_to_catbox(result)
+                app.delete_messages(chat_id, progress_msg.id)
+                return result_url
+            except Exception as e:
+                app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
+                switch_client()
+    finally:
+        thread.join()
 
 @app.on_message(filters.photo | filters.text)
 def main_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     
-    # Mandatory join check for all messages
+    # Check cooldown first
+    remaining = check_cooldown(user_id)
+    if remaining > 0:
+        app.send_message(chat_id, f"⏳ Please wait {remaining} seconds before next swap!")
+        return
+    
+    # Mandatory join check
     if not check_membership(user_id):
         show_mandatory_message(chat_id)
         message.delete()
@@ -163,11 +212,10 @@ def main_handler(client, message):
         app.send_message(chat_id, "📸 Please send photos to face swap!")
         return
     
-    # Initialize user session if not exists
+    # Initialize user session
     if chat_id not in user_data:
         user_data[chat_id] = {"step": "awaiting_source"}
     
-    # Photo handling logic
     try:
         if user_data[chat_id].get("step") == "awaiting_source":
             # Handle source image
@@ -183,7 +231,6 @@ def main_handler(client, message):
             # Handle target image
             file_id = message.photo.file_id
             target_path = download_file(client, file_id, f"{chat_id}_target.jpg")
-            app.send_message(chat_id, "⏳ Processing your face swap...")
             
             # Process images
             result_url = process_face_swap(
@@ -199,13 +246,15 @@ def main_handler(client, message):
                 caption=f"✨ Face swap completed!\n🔗 URL: {result_url}"
             )
             
+            # Update cooldown
+            update_cooldown(user_id)
+            
             # Cleanup
             os.remove(user_data[chat_id]["source"])
             os.remove(target_path)
             del user_data[chat_id]
             
         else:
-            # Reset invalid state
             user_data[chat_id] = {"step": "awaiting_source"}
             app.send_message(chat_id, "📸 Please start by sending the source image")
             
