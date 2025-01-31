@@ -1,3 +1,5 @@
+pyrogram
+ffmpeg-python
 motor
 aiohttp
 pymongo
