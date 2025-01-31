@@ -74,7 +74,8 @@ translations = {
         "help_message": "Hi, how are you? You can use this bot for free.",
         "back_button": "Back",
         "change_lang": "Change Language",
-        "help_button": "Help"
+        "help_button": "Help",
+        "source_received": "✅ Source photo received. Please send the target photo."
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -95,7 +96,8 @@ translations = {
         "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
-        "help_button": "راهنما"
+        "help_button": "راهنما",
+        "source_received": "✅ عکس منبع دریافت شد. لطفا عکس هدف را ارسال کنید."
     }
 }
 
@@ -323,8 +325,8 @@ def toggle_mandatory(client, message):
         f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
     )
 
-@app.on_message(filters.photo | filters.text)
-def main_handler(client, message):
+@app.on_message(filters.photo)
+def photo_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
@@ -338,10 +340,6 @@ def main_handler(client, message):
         message.delete()
         return
 
-    if not message.photo:
-        app.send_message(chat_id, translations[lang]["invalid_input"])
-        return
-
     if chat_id not in user_data:
         user_data[chat_id] = {"step": "awaiting_source", "lang": lang}
 
@@ -353,7 +351,7 @@ def main_handler(client, message):
                 "source": source_path,
                 "step": "awaiting_target"
             })
-            app.send_message(chat_id, translations[lang]["target_image"])
+            app.send_message(chat_id, translations[lang]["source_received"])
 
         elif user_data[chat_id].get("step") == "awaiting_target":
             file_id = message.photo.file_id
@@ -379,10 +377,6 @@ def main_handler(client, message):
             os.remove(target_path)
             os.remove(result_path)  # Cleanup the result file
             del user_data[chat_id]
-
-        else:
-            user_data[chat_id] = {"step": "awaiting_source", "lang": lang}
-            app.send_message(chat_id, translations[lang]["source_image"])
 
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"❌ Critical Error: {str(e)}")
