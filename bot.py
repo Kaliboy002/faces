@@ -63,17 +63,19 @@ translations = {
         "join_channel": "Join Channel",
         "verify": "Verify Join",
         "source_image": "📸 Send the source image (face to swap)",
+        "target_image": "📸 Send the target image (face to replace)",
         "processing": "⏳ Processing...",
         "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
         "cooldown": "⏳ Please wait {} seconds before next swap!",
-        "invalid_input": "📸 Please send photos to face swap!",
+        "invalid_input": "🤨 Error: Invalid input. Please send a photo.",
         "error": "⚠️ An error occurred. Please try again.",
         "not_joined_alert": "😐 You are not joined. You must join then click on verify.",
         "welcome_caption": "Hi {username}, welcome to Face Swap Bot AI! Please send your main or source photo to proceed.",
         "help_message": "Hi, how are you? You can use this bot for free.",
         "back_button": "Back",
         "change_lang": "Change Language",
-        "help_button": "Help"
+        "help_button": "Help",
+        "processing_error": "⚠️ Your photo is already being processed. Please wait."
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -83,17 +85,19 @@ translations = {
         "join_channel": "پیوستن به کانال",
         "verify": "تایید",
         "source_image": "📸 عکس منبع خود را ارسال کنید",
+        "target_image": "📸 عکس هدف خود را ارسال کنید",
         "processing": "⏳ در حال پروسیس...",
         "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
         "cooldown": "⏳ لطفا {} ثانیه دیگر انتظار دهید!",
-        "invalid_input": "📸 لطفا عکس ارسال کنید!",
+        "invalid_input": "🤨 خطا: ورودی نامعتبر. لطفا یک عکس ارسال کنید.",
         "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید.",
         "not_joined_alert": "😐 شما عضو نشده‌اید. باید عضو شوید و سپس روی تایید کلیک کنید.",
         "welcome_caption": "سلام {username}، به بات جابه‌جایی چهره خوش آمدید! لطفا عکس اصلی خود را ارسال کنید.",
         "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
-        "help_button": "راهنما"
+        "help_button": "راهنما",
+        "processing_error": "⚠️ عکس شما در حال پردازش است. لطفا منتظر بمانید."
     }
 }
 
@@ -150,10 +154,8 @@ def upload_to_catbox(file_path):
 
 def show_mandatory_message(chat_id, lang="en"):
     keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(translations[lang]["join_channel"], url=f"https://t.me/{CHANNEL_USERNAME[1:]}"),
-            InlineKeyboardButton(translations[lang]["verify"], callback_data="check_join")
-        ]
+        [InlineKeyboardButton(translations[lang]["join_channel"], url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
+        [InlineKeyboardButton(translations[lang]["verify"], callback_data="check_join")]
     ])
     sent = app.send_message(chat_id, 
         translations[lang]["mandatory_join"],
@@ -216,13 +218,17 @@ def start_handler(client, message):
     ])
 
     # Send welcome message with language selection
-    app.send_message(chat_id, translations["en"]["welcome"], reply_markup=keyboard)
+    sent = app.send_message(chat_id, translations["en"]["welcome"], reply_markup=keyboard)
+    user_data[chat_id] = {"start_msg": sent.id}
 
 @app.on_callback_query(filters.regex("^lang_(en|fa)$"))
 def language_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
     lang = callback.data.split('_')[1]
+
+    # Delete the language selection message
+    app.delete_messages(chat_id, user_data[chat_id]["start_msg"])
 
     # Store selected language in user_data
     user_data[chat_id] = {'lang': lang}
@@ -240,8 +246,10 @@ def send_welcome_message(chat_id, user_id, lang):
 
     # Welcome message with photo and buttons
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(translations[lang]["change_lang"], callback_data="change_lang")],
-        [InlineKeyboardButton(translations[lang]["help_button"], callback_data="help")]
+        [
+            InlineKeyboardButton(translations[lang]["change_lang"], callback_data="change_lang"),
+            InlineKeyboardButton(translations[lang]["help_button"], callback_data="help")
+        ]
     ])
     app.send_photo(
         chat_id,
@@ -340,7 +348,7 @@ def main_handler(client, message):
                 "source": source_path,
                 "step": "awaiting_target"
             })
-            app.send_message(chat_id, translations[lang]["source_image"])
+            app.send_message(chat_id, translations[lang]["target_image"])
 
         elif user_data[chat_id].get("step") == "awaiting_target":
             file_id = message.photo.file_id
