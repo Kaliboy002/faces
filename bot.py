@@ -2,7 +2,7 @@ import os
 import time
 import requests
 import threading
-from queue import Queue  # Import Queue here
+from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
@@ -48,7 +48,7 @@ for api in api_pool:
     api_queue.put(api)
 
 # Thread Pool for Parallel Processing
-executor = ThreadPoolExecutor(max_workers=20)  # Handle up to 20 concurrent swaps
+executor = ThreadPoolExecutor(max_workers=20)
 
 # User Data and State Management
 user_data = {}
@@ -66,8 +66,7 @@ def update_mandatory_status(status: bool):
 def check_cooldown(user_id):
     record = cooldown_collection.find_one({"_id": user_id})
     if record and (time.time() - record["timestamp"]) < COOLDOWN_TIME:
-        remaining = int(COOLDOWN_TIME - (time.time() - record["timestamp"]))
-        return remaining
+        return int(COOLDOWN_TIME - (time.time() - record["timestamp"]))
     return 0
 
 def update_cooldown(user_id):
@@ -111,17 +110,16 @@ def show_mandatory_message(chat_id):
         [InlineKeyboardButton("Verify Join", callback_data="check_join")]
     ])
     sent = app.send_message(chat_id, 
-        "🔒 You must join our channel to use this bot!\n"
-        "Join the channel and click Verify Join to continue.",
+        "🔒 You must join our channel to use this bot!\nJoin the channel and click Verify Join to continue.",
         reply_markup=keyboard
     )
     user_data[chat_id] = {"mandatory_msg": sent.id}
 
 def progress_updater(chat_id, message_id, start_time):
     elapsed = 0
-    while elapsed < 30:  # Max 30 seconds progress
+    while elapsed < 30:
         try:
-            progress = min(elapsed * 3, 100)  # Fake progress %
+            progress = min(elapsed * 3, 100)
             app.edit_message_text(
                 chat_id,
                 message_id,
@@ -139,7 +137,7 @@ def process_face_swap(chat_id, source_path, target_path):
     thread.start()
     
     try:
-        api = api_queue.get()  # Get an available API instance
+        api = api_queue.get()
         result = api.predict(
             source_file=file(source_path),
             target_file=file(target_path),
@@ -148,12 +146,12 @@ def process_face_swap(chat_id, source_path, target_path):
         )
         result_url = upload_to_catbox(result)
         app.delete_messages(chat_id, progress_msg.id)
-        return result_url
+        return result, result_url  # Return both result path and URL
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
         raise
     finally:
-        api_queue.put(api)  # Return API instance to the pool
+        api_queue.put(api)
         thread.join()
 
 @app.on_message(filters.command("start"))
@@ -198,30 +196,24 @@ def main_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     
-    # Check cooldown first
-    remaining = check_cooldown(user_id)
-    if remaining > 0:
+    if (remaining := check_cooldown(user_id)) > 0:
         app.send_message(chat_id, f"⏳ Please wait {remaining} seconds before next swap!")
         return
     
-    # Mandatory join check
     if not check_membership(user_id):
         show_mandatory_message(chat_id)
         message.delete()
         return
     
-    # Handle non-photo messages
     if not message.photo:
         app.send_message(chat_id, "📸 Please send photos to face swap!")
         return
     
-    # Initialize user session
     if chat_id not in user_data:
         user_data[chat_id] = {"step": "awaiting_source"}
     
     try:
         if user_data[chat_id].get("step") == "awaiting_source":
-            # Handle source image
             file_id = message.photo.file_id
             source_path = download_file(client, file_id, f"{chat_id}_source.jpg")
             user_data[chat_id].update({
@@ -231,30 +223,28 @@ def main_handler(client, message):
             app.send_message(chat_id, "🎯 Source image received! Now send target image")
             
         elif user_data[chat_id].get("step") == "awaiting_target":
-            # Handle target image
             file_id = message.photo.file_id
             target_path = download_file(client, file_id, f"{chat_id}_target.jpg")
             
-            # Process images
-            result_url = process_face_swap(
+            # Process images and get both result path and URL
+            result_path, result_url = process_face_swap(
                 chat_id,
                 user_data[chat_id]["source"],
                 target_path
             )
             
-            # Send result
+            # Send the actual swapped image
             app.send_photo(
                 chat_id, 
-                photo=target_path,
+                photo=result_path,  # Send the swapped image file
                 caption=f"✨ Face swap completed!\n🔗 URL: {result_url}"
             )
             
-            # Update cooldown
+            # Update cooldown and cleanup
             update_cooldown(user_id)
-            
-            # Cleanup
             os.remove(user_data[chat_id]["source"])
             os.remove(target_path)
+            os.remove(result_path)  # Cleanup the result file
             del user_data[chat_id]
             
         else:
