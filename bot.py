@@ -11,14 +11,14 @@ mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["shah"]
 settings_collection = db["bot_settings"]
 
-# Initialize default settings if not exists
+# Initialize default settings
 if not settings_collection.find_one({"_id": "mandatory_join"}):
     settings_collection.insert_one({
         "_id": "mandatory_join",
         "enabled": True
     })
 
-# Telegram Bot Configuration
+# Telegram Configuration
 API_ID = "15787995"
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"
@@ -28,7 +28,7 @@ CHANNEL_USERNAME = "@Kali_Linux_BOTS"
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# List of Gradio Clients for Face Swap APIs
+# Face Swap API Configuration
 api_clients = [
     "Kaliboy0012/face-swapm",
     "Jonny0101/Image-Face-Swap",
@@ -47,6 +47,15 @@ def update_mandatory_status(status: bool):
         upsert=True
     )
 
+def check_membership(user_id):
+    if not get_mandatory_status():
+        return True
+    try:
+        app.get_chat_member(CHANNEL_USERNAME, user_id)
+        return True
+    except:
+        return False
+
 def get_client():
     global current_client_index
     return Client(api_clients[current_client_index])
@@ -57,154 +66,157 @@ def switch_client():
 
 def download_file(client, file_id, save_as):
     try:
-        file_path = client.download_media(file_id, file_name=save_as)
-        return file_path
+        return client.download_media(file_id, file_name=save_as)
     except Exception as e:
-        raise Exception(f"Failed to download file: {e}")
+        raise Exception(f"Download failed: {e}")
 
 def upload_to_catbox(file_path):
     try:
         with open(file_path, "rb") as f:
             response = requests.post(
                 "https://catbox.moe/user/api.php",
-                data={"reqtype": "fileupload"},
-                files={"fileToUpload": f}
+                files={"fileToUpload": f},
+                data={"reqtype": "fileupload"}
             )
             response.raise_for_status()
         return response.text.strip()
     except Exception as e:
-        raise Exception(f"Failed to upload file to Catbox: {e}")
+        raise Exception(f"Upload failed: {e}")
+
+def show_mandatory_message(chat_id):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
+        [InlineKeyboardButton("Verify Join", callback_data="check_join")]
+    ])
+    sent = app.send_message(chat_id, 
+        "🔒 You must join our channel to use this bot!\n"
+        "Join the channel and click Verify Join to continue.",
+        reply_markup=keyboard
+    )
+    user_data[chat_id] = {"mandatory_msg": sent.id}
 
 @app.on_message(filters.command("start"))
-def start(client, message):
+def start_handler(client, message):
+    message.delete()
     chat_id = message.chat.id
-    if get_mandatory_status():
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
-            [InlineKeyboardButton("Check", callback_data="check_join")]
-        ])
-        sent_message = message.reply_text(
-            "**Mandatory Join**\nYou must join our channel to use this bot!",
-            reply_markup=keyboard
-        )
-        user_data[chat_id] = {"mandatory_message_id": sent_message.id}
+    user_id = message.from_user.id
+    
+    if not check_membership(user_id):
+        show_mandatory_message(chat_id)
     else:
         user_data[chat_id] = {"step": "awaiting_source"}
-        message.reply_text("Welcome to the Face Swap Bot! Please send the source image (face to swap).")
+        app.send_message(chat_id, "📸 Send the source image (face to swap)")
 
-@app.on_message(filters.command("off") & filters.user(ADMIN_CHAT_ID))
-def disable_mandatory(client, message):
-    update_mandatory_status(False)
-    message.reply_text("✅ Mandatory channel join disabled. Users can now use the bot without joining.")
+@app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
+def toggle_mandatory(client, message):
+    cmd = message.command[0]
+    status = cmd == "on"
+    update_mandatory_status(status)
+    app.send_message(message.chat.id, 
+        f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
+    )
 
-@app.on_message(filters.command("on") & filters.user(ADMIN_CHAT_ID))
-def enable_mandatory(client, message):
-    update_mandatory_status(True)
-    message.reply_text("🔒 Mandatory channel join enabled. Users must join channel to use the bot.")
-
-@app.on_callback_query(filters.create(lambda _, __, query: query.data == "check_join"))
-def check_join(client, callback_query):
-    chat_id = callback_query.message.chat.id
-    user_id = callback_query.from_user.id
+@app.on_callback_query(filters.regex("^check_join$"))
+def verify_join(client, callback):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
     
-    if not get_mandatory_status():
-        client.answer_callback_query(
-            callback_query.id,
-            "ℹ️ Channel verification is currently disabled by admin.",
-            show_alert=True
-        )
-        return
-
-    try:
-        client.get_chat_member(CHANNEL_USERNAME, user_id)
-        
-        if chat_id in user_data and "mandatory_message_id" in user_data[chat_id]:
-            client.delete_messages(chat_id, user_data[chat_id]["mandatory_message_id"])
-            del user_data[chat_id]["mandatory_message_id"]
-        
+    if check_membership(user_id):
+        app.delete_messages(chat_id, user_data[chat_id]["mandatory_msg"])
         user_data[chat_id] = {"step": "awaiting_source"}
-        client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
-        
-    except Exception as e:
-        client.answer_callback_query(
-            callback_query.id,
-            "⛔ You haven't joined the channel! Please join and click Check again.",
+        app.send_message(chat_id, "✅ Verification successful! Send source image now.")
+    else:
+        app.answer_callback_query(
+            callback.id,
+            "❌ You haven't joined the channel!",
             show_alert=True
         )
-    finally:
-        callback_query.answer()
 
-@app.on_message(filters.photo)
-def handle_photo(client, message):
+def process_face_swap(chat_id, source_path, target_path):
+    while True:
+        try:
+            api = get_client()
+            result = api.predict(
+                source_file=file(source_path),
+                target_file=file(target_path),
+                doFaceEnhancer=True,
+                api_name="/predict"
+            )
+            return upload_to_catbox(result)
+        except Exception as e:
+            app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
+            switch_client()
+
+@app.on_message(filters.photo | filters.text)
+def main_handler(client, message):
     chat_id = message.chat.id
-    if chat_id not in user_data:
-        client.send_message(chat_id, "Please start the bot using /start.")
+    user_id = message.from_user.id
+    
+    # Mandatory join check for all messages
+    if not check_membership(user_id):
+        show_mandatory_message(chat_id)
+        message.delete()
         return
-
-    step = user_data[chat_id].get("step", None)
-
+    
+    # Handle non-photo messages
+    if not message.photo:
+        app.send_message(chat_id, "📸 Please send photos to face swap!")
+        return
+    
+    # Initialize user session if not exists
+    if chat_id not in user_data:
+        user_data[chat_id] = {"step": "awaiting_source"}
+    
+    # Photo handling logic
     try:
-        if step == "awaiting_source":
+        if user_data[chat_id].get("step") == "awaiting_source":
+            # Handle source image
             file_id = message.photo.file_id
-            source_image_path = f"{chat_id}_source.jpg"
-            user_data[chat_id]["source_image"] = download_file(client, file_id, source_image_path)
-            user_data[chat_id]["step"] = "awaiting_target"
-            client.send_message(chat_id, "Great! Now send the target image (destination face).")
-
-        elif step == "awaiting_target":
-            if "source_image" not in user_data[chat_id]:
-                client.send_message(chat_id, "Source image is missing. Please restart with /start.")
-                reset_user_data(chat_id)
-                return
-
+            source_path = download_file(client, file_id, f"{chat_id}_source.jpg")
+            user_data[chat_id].update({
+                "source": source_path,
+                "step": "awaiting_target"
+            })
+            app.send_message(chat_id, "🎯 Source image received! Now send target image")
+            
+        elif user_data[chat_id].get("step") == "awaiting_target":
+            # Handle target image
             file_id = message.photo.file_id
-            target_image_path = f"{chat_id}_target.jpg"
-            user_data[chat_id]["target_image"] = download_file(client, file_id, target_image_path)
-            client.send_message(chat_id, "Processing your request, please wait...")
-
-            # Perform Face Swap
-            while True:
-                try:
-                    client_api = get_client()
-                    source_file = user_data[chat_id]["source_image"]
-                    target_file = user_data[chat_id]["target_image"]
-
-                    result = client_api.predict(
-                        source_file=file(source_file),
-                        target_file=file(target_file),
-                        doFaceEnhancer=True,
-                        api_name="/predict"
-                    )
-
-                    swapped_image_url = upload_to_catbox(result)
-                    client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
-                    break
-
-                except Exception as e:
-                    client.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
-                    switch_client()
-
-            cleanup_files(chat_id)
-            reset_user_data(chat_id)
-
+            target_path = download_file(client, file_id, f"{chat_id}_target.jpg")
+            app.send_message(chat_id, "⏳ Processing your face swap...")
+            
+            # Process images
+            result_url = process_face_swap(
+                chat_id,
+                user_data[chat_id]["source"],
+                target_path
+            )
+            
+            # Send result
+            app.send_photo(
+                chat_id, 
+                photo=target_path,
+                caption=f"✨ Face swap completed!\n🔗 URL: {result_url}"
+            )
+            
+            # Cleanup
+            os.remove(user_data[chat_id]["source"])
+            os.remove(target_path)
+            del user_data[chat_id]
+            
         else:
-            client.send_message(chat_id, "Invalid step. Please restart with /start.")
-            reset_user_data(chat_id)
-
+            # Reset invalid state
+            user_data[chat_id] = {"step": "awaiting_source"}
+            app.send_message(chat_id, "📸 Please start by sending the source image")
+            
     except Exception as e:
-        client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
-        reset_user_data(chat_id)
-
-def reset_user_data(chat_id):
-    if chat_id in user_data:
-        user_data.pop(chat_id, None)
-
-def cleanup_files(chat_id):
-    if chat_id in user_data:
-        for key in ["source_image", "target_image"]:
-            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
-                os.remove(user_data[chat_id][key])
+        app.send_message(ADMIN_CHAT_ID, f"❌ Critical Error: {str(e)}")
+        if chat_id in user_data:
+            if "source" in user_data[chat_id]:
+                os.remove(user_data[chat_id]["source"])
+            del user_data[chat_id]
+        app.send_message(chat_id, "⚠️ An error occurred. Please try again.")
 
 if __name__ == "__main__":
-    print("🤖 FaceSwap Bot Started!")
+    print("🤖 FaceSwap Bot Activated!")
     app.run()
