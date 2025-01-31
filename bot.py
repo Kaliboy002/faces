@@ -62,7 +62,7 @@ translations = {
         "verify_join": "✅ Verification successful! Send source image now.",
         "join_channel": "Join Channel",
         "verify": "Verify Join",
-        "source_image": "📸 Send the source image (face to swap)",
+        "source_image": "📸 Source image received. Now send the target image for face swap.",
         "target_image": "📸 Send the target image (face to replace)",
         "processing": "⏳ Processing...",
         "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
@@ -74,8 +74,7 @@ translations = {
         "help_message": "Hi, how are you? You can use this bot for free.",
         "back_button": "Back",
         "change_lang": "Change Language",
-        "help_button": "Help",
-        "source_received": "✅ Source photo received. Please send the target photo."
+        "help_button": "Help"
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -84,7 +83,7 @@ translations = {
         "verify_join": "✅ تایید با موفقیت انجام شد! عکس منبع خود را ارسال کنید.",
         "join_channel": "پیوستن به کانال",
         "verify": "تایید",
-        "source_image": "📸 عکس منبع خود را ارسال کنید",
+        "source_image": "📸 عکس منبع دریافت شد. حالا عکس هدف را برای جابه‌جایی چهره ارسال کنید.",
         "target_image": "📸 عکس هدف خود را ارسال کنید",
         "processing": "⏳ در حال پروسیس...",
         "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
@@ -96,8 +95,7 @@ translations = {
         "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
-        "help_button": "راهنما",
-        "source_received": "✅ عکس منبع دریافت شد. لطفا عکس هدف را ارسال کنید."
+        "help_button": "راهنما"
     }
 }
 
@@ -145,12 +143,11 @@ def upload_to_catbox(file_path):
             response = requests.post(
                 "https://catbox.moe/user/api.php",
                 files={"fileToUpload": f},
-                data={"reqtype": "fileupload"},
-                timeout=10  # Set timeout to 10 seconds
+                data={"reqtype": "fileupload"}
             )
             response.raise_for_status()
         return response.text.strip()
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         raise Exception(f"Upload failed: {e}")
 
 def show_mandatory_message(chat_id, lang="en"):
@@ -164,25 +161,9 @@ def show_mandatory_message(chat_id, lang="en"):
     )
     user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
-def progress_updater(chat_id, message_id, start_time):
-    progress_steps = [1, 15, 24, 38, 49, 55, 67, 75, 86, 95, 100]
-    for progress in progress_steps:
-        try:
-            app.edit_message_text(
-                chat_id,
-                message_id,
-                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%"
-            )
-            time.sleep(3)  # Adjust sleep time as needed
-        except:
-            break
-
 def process_face_swap(chat_id, source_path, target_path):
-    start_time = time.time()
     lang = user_data[chat_id].get('lang', 'en')
     progress_msg = app.send_message(chat_id, translations[lang]['processing'])
-    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
-    thread.start()
 
     try:
         api = api_queue.get()
@@ -200,7 +181,6 @@ def process_face_swap(chat_id, source_path, target_path):
         raise
     finally:
         api_queue.put(api)
-        thread.join()
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
@@ -226,7 +206,7 @@ def language_callback(client, callback):
     lang = callback.data.split('_')[1]
 
     # Delete the language selection message
-    app.delete_messages(chat_id, callback.message.id)
+    app.delete_messages(chat_id, user_data[chat_id]["start_msg"])
 
     # Store selected language in user_data
     user_data[chat_id] = {'lang': lang}
@@ -277,9 +257,6 @@ def change_language_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
 
-    # Delete the current message
-    app.delete_messages(chat_id, callback.message.id)
-
     # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
         [
@@ -295,9 +272,6 @@ def help_callback(client, callback):
     chat_id = callback.message.chat.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
-    # Delete the current message
-    app.delete_messages(chat_id, callback.message.id)
-
     # Help message with Back button
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
@@ -309,9 +283,6 @@ def back_to_welcome_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
-
-    # Delete the current message
-    app.delete_messages(chat_id, callback.message.id)
 
     # Send welcome message again
     send_welcome_message(chat_id, user_id, lang)
@@ -325,8 +296,8 @@ def toggle_mandatory(client, message):
         f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
     )
 
-@app.on_message(filters.photo)
-def photo_handler(client, message):
+@app.on_message(filters.photo | filters.text)
+def main_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
@@ -340,6 +311,10 @@ def photo_handler(client, message):
         message.delete()
         return
 
+    if not message.photo:
+        app.send_message(chat_id, translations[lang]["invalid_input"])
+        return
+
     if chat_id not in user_data:
         user_data[chat_id] = {"step": "awaiting_source", "lang": lang}
 
@@ -351,7 +326,7 @@ def photo_handler(client, message):
                 "source": source_path,
                 "step": "awaiting_target"
             })
-            app.send_message(chat_id, translations[lang]["source_received"])
+            app.send_message(chat_id, translations[lang]["source_image"])
 
         elif user_data[chat_id].get("step") == "awaiting_target":
             file_id = message.photo.file_id
@@ -377,6 +352,10 @@ def photo_handler(client, message):
             os.remove(target_path)
             os.remove(result_path)  # Cleanup the result file
             del user_data[chat_id]
+
+        else:
+            user_data[chat_id] = {"step": "awaiting_source", "lang": lang}
+            app.send_message(chat_id, translations[lang]["source_image"])
 
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"❌ Critical Error: {str(e)}")
