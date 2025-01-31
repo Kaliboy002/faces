@@ -64,7 +64,7 @@ translations = {
         "verify": "Verify Join",
         "source_image": "📸 Source image received. Now send the target image for face swap.",
         "target_image": "📸 Send the target image (face to replace)",
-        "processing": "⏳ Processing...",
+        "processing": "⏳ Processing... {}%",
         "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
         "cooldown": "⏳ Please wait {} seconds before next swap!",
         "invalid_input": "🤨 Error: Invalid input. Please send a photo.",
@@ -85,7 +85,7 @@ translations = {
         "verify": "تایید",
         "source_image": "📸 عکس منبع دریافت شد. حالا عکس هدف را برای جابه‌جایی چهره ارسال کنید.",
         "target_image": "📸 عکس هدف خود را ارسال کنید",
-        "processing": "⏳ در حال پروسیس...",
+        "processing": "⏳ در حال پروسیس... {}%",
         "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
         "cooldown": "⏳ لطفا {} ثانیه دیگر انتظار دهید!",
         "invalid_input": "🤨 خطا: ورودی نامعتبر. لطفا یک عکس ارسال کنید.",
@@ -161,9 +161,27 @@ def show_mandatory_message(chat_id, lang="en"):
     )
     user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
+def progress_updater(chat_id, message_id, lang):
+    progress = 0
+    while progress < 100:
+        try:
+            app.edit_message_text(
+                chat_id,
+                message_id,
+                translations[lang]["processing"].format(progress)
+            )
+            time.sleep(1)
+            progress += 10
+        except:
+            break
+
 def process_face_swap(chat_id, source_path, target_path):
     lang = user_data[chat_id].get('lang', 'en')
-    progress_msg = app.send_message(chat_id, translations[lang]['processing'])
+    progress_msg = app.send_message(chat_id, translations[lang]["processing"].format(0))
+
+    # Start progress updater
+    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, lang))
+    thread.start()
 
     try:
         api = api_queue.get()
@@ -181,6 +199,7 @@ def process_face_swap(chat_id, source_path, target_path):
         raise
     finally:
         api_queue.put(api)
+        thread.join()
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
