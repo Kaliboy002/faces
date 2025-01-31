@@ -384,7 +384,6 @@ def main_handler(client, message):
                 photo=result_path,
                 caption=f"{translations[lang]['processing_complete']}{result_url}"
             )
-
             # Cleanup and cooldown
             update_cooldown(user_id)
             os.remove(user_data[chat_id]["source"])
