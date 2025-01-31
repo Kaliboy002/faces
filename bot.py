@@ -67,7 +67,9 @@ translations = {
         "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
         "cooldown": "⏳ Please wait {} seconds before next swap!",
         "invalid_input": "📸 Please send photos to face swap!",
-        "error": "⚠️ An error occurred. Please try again."
+        "error": "⚠️ An error occurred. Please try again.",
+        "help": "❓ Help",
+        "back": "🔙 Back"
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -81,7 +83,9 @@ translations = {
         "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
         "cooldown": "⏳ لطفا {} ثانیه دیگر انتظار دهید!",
         "invalid_input": "📸 لطفا عکس ارسال کنید!",
-        "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید."
+        "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید.",
+        "help": "❓ راهنمایی",
+        "back": "🔙 بازگشت"
     }
 }
 
@@ -200,6 +204,9 @@ def start_handler(client, message):
         [
             InlineKeyboardButton("English", callback_data="lang_en"),
             InlineKeyboardButton("Persian", callback_data="lang_fa")
+        ],
+        [
+            InlineKeyboardButton(translations[user_data.get(chat_id, {}).get('lang', 'en')]["help"], callback_data="help")
         ]
     ])
 
@@ -209,8 +216,13 @@ def start_handler(client, message):
     else:
         lang = 'en'  # default language
 
-    # Send welcome message with language selection
-    app.send_message(chat_id, translations[lang]["welcome"], reply_markup=keyboard)
+    # Send welcome message with language selection and help button
+    app.send_photo(
+        chat_id,
+        photo="https://example.com/welcome_photo.jpg",
+        caption=translations[lang]["welcome"],
+        reply_markup=keyboard
+    )
 
 @app.on_callback_query(filters.regex("^lang_(en|fa)$"))
 def language_callback(client, callback):
@@ -227,6 +239,47 @@ def language_callback(client, callback):
     else:
         user_data[chat_id]['step'] = 'awaiting_source'
         app.send_message(chat_id, translations[lang]["source_image"])
+
+@app.on_callback_query(filters.regex("^help$"))
+def help_callback(client, callback):
+    chat_id = callback.message.chat.id
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(translations[lang]["back"], callback_data="back")
+        ]
+    ])
+
+    app.edit_message_text(
+        chat_id,
+        callback.message.id,
+        translations[lang]["help_message"],
+        reply_markup=keyboard
+    )
+
+@app.on_callback_query(filters.regex("^back$"))
+def back_callback(client, callback):
+    chat_id = callback.message.chat.id
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    # Create language selection keyboard
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("English", callback_data="lang_en"),
+            InlineKeyboardButton("Persian", callback_data="lang_fa")
+        ],
+        [
+            InlineKeyboardButton(translations[lang]["help"], callback_data="help")
+        ]
+    ])
+
+    app.edit_message_text(
+        chat_id,
+        callback.message.id,
+        translations[lang]["welcome"],
+        reply_markup=keyboard
+    )
 
 @app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
 def toggle_mandatory(client, message):
