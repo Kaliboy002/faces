@@ -29,7 +29,7 @@ API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"
 ADMIN_CHAT_ID = 7046488481
 CHANNEL_USERNAME = "@Kali_Linux_BOTS"
-COOLDOWN_TIME = 80  # seconds
+COOLDOWN_TIME = 30  # seconds
 
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -278,6 +278,11 @@ def verify_join(client, callback):
             get_text('mandatory', language),
             show_alert=True
         )
+
+@app.on_message(filters.command("language"))
+def language_handler(client, message):
+    chat_id = message.chat.id
+    show_language_selection(chat_id)
 
 @app.on_message(filters.photo | filters.text)
 def main_handler(client, message):
