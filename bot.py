@@ -21,7 +21,7 @@ API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"
 ADMIN_CHAT_ID = 7046488481
 CHANNEL_USERNAME = "@Kali_Linux_BOTS"
-COOLDOWN_TIME = 10  # seconds
+COOLDOWN_TIME = 80  # seconds
 
 # Face Swap API Configuration
 api_clients = [
@@ -258,12 +258,12 @@ async def main_handler(client, message):
             del user_data[chat_id]
         await app.send_message(chat_id, "⚠️ An error occurred. Please try again.")
 
-# Main function
 async def main():
     await app.start()
     await init_api_queue()
     print("🤖 FaceSwap Bot Activated!")
-    await app.idle()
+    # Keep the bot running
+    await asyncio.get_event_loop().run_forever()
 
 if __name__ == "__main__":
     asyncio.run(main())
