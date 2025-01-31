@@ -9,9 +9,9 @@ import asyncio
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Environment Variables
-API_ID = os.getenv("15787995")  # Get from https://my.telegram.org
-API_HASH = os.getenv("e51a3154d2e0c45e5ed70251d68382de")  # Get from https://my.telegram.org
-BOT_TOKEN = os.getenv("7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ")  # Get from BotFather
+API_ID = os.getenv("API_ID")  # Get from https://my.telegram.org
+API_HASH = os.getenv("API_HASH")  # Get from https://my.telegram.org
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Get from BotFather
 
 # Initialize Pyrogram Client
 app = Client("video_compressor_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
