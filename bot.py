@@ -138,14 +138,16 @@ def upload_to_catbox(file_path):
 
 def show_mandatory_message(chat_id, lang="en"):
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(translations[lang]["join_channel"], url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
-        [InlineKeyboardButton(translations[lang]["verify"], callback_data="check_join")]
+        [
+            InlineKeyboardButton(translations[lang]["join_channel"], url=f"https://t.me/{CHANNEL_USERNAME[1:]}"),
+            InlineKeyboardButton(translations[lang]["verify"], callback_data="check_join")
+        ]
     ])
     sent = app.send_message(chat_id, 
         translations[lang]["mandatory_join"],
         reply_markup=keyboard
     )
-    user_data[chat_id] = {"mandatory_msg": sent.id}
+    user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
 def progress_updater(chat_id, message_id, start_time):
     elapsed = 0
@@ -155,7 +157,7 @@ def progress_updater(chat_id, message_id, start_time):
             app.edit_message_text(
                 chat_id,
                 message_id,
-                f"{translations[user_data[chat_id].get('lang', 'en')]['processing']}... {progress}%\nEstimated time: {30 - elapsed}s remaining"
+                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%\nEstimated time: {30 - elapsed}s remaining"
             )
             time.sleep(5)
             elapsed += 5
@@ -195,8 +197,10 @@ def start_handler(client, message):
 
     # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("English", callback_data="lang_en")],
-        [InlineKeyboardButton("Persian", callback_data="lang_fa")]
+        [
+            InlineKeyboardButton("English", callback_data="lang_en"),
+            InlineKeyboardButton("Persian", callback_data="lang_fa")
+        ]
     ])
 
     # Check if language is already selected
@@ -215,9 +219,7 @@ def language_callback(client, callback):
     lang = callback.data.split('_')[1]
 
     # Store selected language in user_data
-    if chat_id not in user_data:
-        user_data[chat_id] = {}
-    user_data[chat_id]['lang'] = lang
+    user_data[chat_id] = {'lang': lang}
 
     # Proceed with mandatory join check
     if not check_membership(user_id):
@@ -239,7 +241,7 @@ def toggle_mandatory(client, message):
 def verify_join(client, callback):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
-    lang = user_data[chat_id].get('lang', 'en')
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
 
     if check_membership(user_id):
         app.delete_messages(chat_id, user_data[chat_id]["mandatory_msg"])
@@ -248,15 +250,30 @@ def verify_join(client, callback):
     else:
         app.answer_callback_query(
             callback.id,
-            translations[lang]["invalid_input"],
+            translations[lang]["mandatory_join"],
             show_alert=True
         )
+
+@app.on_message(filters.command("language"))
+def change_language(client, message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+
+    # Create language selection keyboard
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("English", callback_data="lang_en"),
+            InlineKeyboardButton("Persian", callback_data="lang_fa")
+        ]
+    ])
+
+    app.send_message(chat_id, translations[user_data.get(chat_id, {}).get('lang', 'en')]["select_lang"], reply_markup=keyboard)
 
 @app.on_message(filters.photo | filters.text)
 def main_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    lang = user_data[chat_id].get('lang', 'en')
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
 
     if (remaining := check_cooldown(user_id)) > 0:
         app.send_message(chat_id, translations[lang]["cooldown"].format(remaining))
