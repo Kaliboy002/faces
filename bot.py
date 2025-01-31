@@ -74,8 +74,7 @@ translations = {
         "help_message": "ℹ️ How to use:\n1. Send SOURCE photo (face to swap)\n2. Send TARGET photo (face to replace)\n3. Wait for processing!",
         "back_button": "Back",
         "change_lang": "Change Language",
-        "help_button": "Help",
-        "processing_error": "⚠️ Your photo is already being processed. Please wait."
+        "help_button": "Help"
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -96,8 +95,7 @@ translations = {
         "help_message": "ℹ️ راهنمای استفاده:\n1. عکس مبدا را ارسال کنید (چهره ای که میخواهید جایگزین شود)\n2. عکس هدف را ارسال کنید (چهره ای که جایگزین میشود)\n3. منتظر پردازش بمانید!",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
-        "help_button": "راهنما",
-        "processing_error": "⚠️ عکس شما در حال پردازش است. لطفا منتظر بمانید."
+        "help_button": "راهنما"
     }
 }
 
@@ -202,7 +200,6 @@ def process_face_swap(chat_id, source_path, target_path):
     finally:
         api_queue.put(api)
         thread.join()
-        user_data[chat_id]["processing"] = False
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
@@ -329,11 +326,6 @@ def main_handler(client, message):
     user_id = message.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
-    # Check if already processing
-    if user_data.get(chat_id, {}).get("processing"):
-        app.send_message(chat_id, translations[lang]["processing_error"])
-        return
-
     # Check cooldown
     if (remaining := check_cooldown(user_id)) > 0:
         app.send_message(chat_id, translations[lang]["cooldown"].format(remaining))
@@ -357,7 +349,6 @@ def main_handler(client, message):
     try:
         # Handle source photo
         if user_data[chat_id].get("step") == "awaiting_source":
-            user_data[chat_id]["processing"] = True
             file_id = message.photo.file_id
             source_path = download_file(client, file_id, f"{chat_id}_source.jpg")
             user_data[chat_id].update({
@@ -397,7 +388,7 @@ def main_handler(client, message):
         if chat_id in user_data:
             if "source" in user_data[chat_id]:
                 os.remove(user_data[chat_id]["source"])
-            user_data[chat_id]["processing"] = False
+            del user_data[chat_id]
         app.send_message(chat_id, translations[lang]["error"])
 
 if __name__ == "__main__":
