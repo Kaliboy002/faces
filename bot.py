@@ -29,7 +29,7 @@ API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"
 ADMIN_CHAT_ID = 7046488481
 CHANNEL_USERNAME = "@Kali_Linux_BOTS"
-COOLDOWN_TIME = 10  # seconds
+COOLDOWN_TIME = 80  # seconds
 
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -52,38 +52,6 @@ executor = ThreadPoolExecutor(max_workers=20)
 
 # User Data and State Management
 user_data = {}
-
-# Language translations
-translations = {
-    "en": {
-        "welcome": "🤖 Face Swap Bot\nPlease select your language.",
-        "select_lang": "Please select your language",
-        "mandatory_join": "🔒 You must join our channel to use this bot!\nJoin the channel and click Verify Join to continue.",
-        "verify_join": "✅ Verification successful! Send source image now.",
-        "join_channel": "Join Channel",
-        "verify": "Verify Join",
-        "source_image": "📸 Send the source image (face to swap)",
-        "processing": "⏳ Processing...",
-        "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
-        "cooldown": "⏳ Please wait {} seconds before next swap!",
-        "invalid_input": "📸 Please send photos to face swap!",
-        "error": "⚠️ An error occurred. Please try again."
-    },
-    "fa": {
-        "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
-        "select_lang": "لطفا زبان خود را انتخاب کنید",
-        "mandatory_join": "🔒 برای استفاده از این بات باید به کانال ما پیوسته باشید!\nلطفا به کانال پیوسته و روی دکمه تایید کلیک کنید.",
-        "verify_join": "✅ تایید با موفقیت انجام شد! عکس منبع خود را ارسال کنید.",
-        "join_channel": "پیوستن به کانال",
-        "verify": "تایید",
-        "source_image": "📸 عکس منبع خود را ارسال کنید",
-        "processing": "⏳ در حال پروسیس...",
-        "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
-        "cooldown": "⏳ لطفا {} ثانیه دیگر انتظار دهید!",
-        "invalid_input": "📸 لطفا عکس ارسال کنید!",
-        "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید."
-    }
-}
 
 def get_mandatory_status():
     return settings_collection.find_one({"_id": "mandatory_join"})["enabled"]
@@ -136,18 +104,81 @@ def upload_to_catbox(file_path):
     except Exception as e:
         raise Exception(f"Upload failed: {e}")
 
-def show_mandatory_message(chat_id, lang="en"):
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(translations[lang]["join_channel"], url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
-        [InlineKeyboardButton(translations[lang]["verify"], callback_data="check_join")]
-    ])
-    sent = app.send_message(chat_id, 
-        translations[lang]["mandatory_join"],
-        reply_markup=keyboard
-    )
-    user_data[chat_id] = {"mandatory_msg": sent.id}
+def get_text(message_type, language='en'):
+    texts = {
+        'start': {
+            'en': "🤖 Welcome to FaceSwap Bot!\nPlease select your language.",
+            'fa': "🤖 خوش آمدید به ربات تغییر چهره!\nلطفا زبان خود را انتخاب کنید."
+        },
+        'select_lang': {
+            'en': "Please select your language:",
+            'fa': "لطفا زبان خود را انتخاب کنید:"
+        },
+        'mandatory': {
+            'en': "🔒 You must join our channel to use this bot!\nJoin the channel and click Verify Join to continue.",
+            'fa': "🔒 برای استفاده از این ربات باید به کانال ما بپیوندید!\nلطفا به کانال پیوسته و روی دکمه تایید کلیک کنید."
+        },
+        'verification': {
+            'en': "✅ Verification successful! Send source image now.",
+            'fa': "✅ تایید با موفقیت انجام شد! عکس منبع خود را ارسال کنید."
+        },
+        'awaiting_source': {
+            'en': "📸 Send the source image (face to swap)",
+            'fa': "📸 عکس منبع خود را ارسال کنید (چهرهای میخواهید تغییر دهد)"
+        },
+        'processing': {
+            'en': "⏳ Processing... {}%\nEstimated time: {}s remaining",
+            'fa': "⏳ در حال پردازش... {}%\nزمان مقدور: {}s باقی"
+        },
+        'result': {
+            'en': "✨ Face swap completed!\n🔗 URL: {}",
+            'fa': "✨ تغییر چهره به اتمام رسید!\n🔗 لینک: {}"
+        },
+        'cooldown': {
+            'en': "⏳ Please wait {} seconds before next swap!",
+            'fa': "⏳ لطفا {} ثانیه دیگر از دسترسی خود استفاده کنید!"
+        },
+        'invalid_input': {
+            'en': "📸 Please send photos to face swap!",
+            'fa': "📸 لطفا عکس ارسال کنید تا تغییر چهره انجام شود!"
+        },
+        'error': {
+            'en': "⚠️ An error occurred. Please try again.",
+            'fa': "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید."
+        },
+        'admin_status': {
+            'en': "✅ Mandatory join {} successfully!",
+            'fa': "✅ {} اجباری پیوستن با موفقیت انجام شد!"
+        },
+        'join_channel': {
+            'en': "Join Channel",
+            'fa': "پیوستن به کانال"
+        },
+        'verify_join': {
+            'en': "Verify Join",
+            'fa': "تایید پیوستن"
+        }
+    }
+    return texts[message_type].get(language, 'en')
 
-def progress_updater(chat_id, message_id, start_time):
+def show_language_selection(chat_id):
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("English", callback_data="lang_en"),
+            InlineKeyboardButton("Persian", callback_data="lang_fa")
+        ]
+    ])
+    app.send_message(chat_id, get_text('select_lang', 'en'), reply_markup=keyboard)
+
+def show_mandatory_message(chat_id, language='en'):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(get_text('join_channel', language), url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
+        [InlineKeyboardButton(get_text('verify_join', language), callback_data="check_join")]
+    ])
+    sent = app.send_message(chat_id, get_text('mandatory', language), reply_markup=keyboard)
+    user_data[chat_id] = {"mandatory_msg": sent.id, "language": language}
+
+def progress_updater(chat_id, message_id, start_time, language='en'):
     elapsed = 0
     while elapsed < 30:
         try:
@@ -155,18 +186,17 @@ def progress_updater(chat_id, message_id, start_time):
             app.edit_message_text(
                 chat_id,
                 message_id,
-                f"{translations[user_data[chat_id].get('lang', 'en')]['processing']}... {progress}%\nEstimated time: {30 - elapsed}s remaining"
+                get_text('processing', language).format(progress, 30 - elapsed)
             )
             time.sleep(5)
             elapsed += 5
         except:
             break
 
-def process_face_swap(chat_id, source_path, target_path):
+def process_face_swap(chat_id, source_path, target_path, language='en'):
     start_time = time.time()
-    lang = user_data[chat_id].get('lang', 'en')
-    progress_msg = app.send_message(chat_id, translations[lang]['processing'])
-    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
+    progress_msg = app.send_message(chat_id, get_text('processing', language).format(0, 30))
+    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time, language))
     thread.start()
 
     try:
@@ -179,7 +209,7 @@ def process_face_swap(chat_id, source_path, target_path):
         )
         result_url = upload_to_catbox(result)
         app.delete_messages(chat_id, progress_msg.id)
-        return result, result_url  # Return both result path and URL
+        return result, result_url
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
         raise
@@ -193,62 +223,59 @@ def start_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
-    # Create language selection keyboard
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("English", callback_data="lang_en")],
-        [InlineKeyboardButton("Persian", callback_data="lang_fa")]
-    ])
-
-    # Check if language is already selected
-    if chat_id in user_data and 'lang' in user_data[chat_id]:
-        lang = user_data[chat_id]['lang']
+    if chat_id in user_data and 'language' in user_data[chat_id]:
+        language = user_data[chat_id]['language']
     else:
-        lang = 'en'  # default language
+        language = 'en'
 
-    # Send welcome message with language selection
-    app.send_message(chat_id, translations[lang]["welcome"], reply_markup=keyboard)
-
-@app.on_callback_query(filters.regex("^lang_(en|fa)$"))
-def language_callback(client, callback):
-    chat_id = callback.message.chat.id
-    user_id = callback.from_user.id
-    lang = callback.data.split('_')[1]
-
-    # Store selected language in user_data
-    if chat_id not in user_data:
-        user_data[chat_id] = {}
-    user_data[chat_id]['lang'] = lang
-
-    # Proceed with mandatory join check
     if not check_membership(user_id):
-        show_mandatory_message(chat_id, lang)
+        show_mandatory_message(chat_id, language)
     else:
-        user_data[chat_id]['step'] = 'awaiting_source'
-        app.send_message(chat_id, translations[lang]["source_image"])
+        if chat_id not in user_data:
+            user_data[chat_id] = {"step": "awaiting_source", "language": language}
+        app.send_message(chat_id, get_text('awaiting_source', language))
 
 @app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
 def toggle_mandatory(client, message):
     cmd = message.command[0]
     status = cmd == "on"
     update_mandatory_status(status)
-    app.send_message(message.chat.id, 
-        f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
-    )
+    app.send_message(message.chat.id, get_text('admin_status', 'en').format("enabled" if status else "disabled"))
+
+@app.on_callback_query(filters.regex("^lang_"))
+def set_language(client, callback):
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    language = callback.data.split('_')[1]
+
+    if chat_id not in user_data:
+        user_data[chat_id] = {}
+    user_data[chat_id]['language'] = language
+
+    if callback.message.text == get_text('select_lang', 'en'):
+        app.edit_message_text(chat_id, callback.message.id, get_text('start', language))
+    else:
+        app.delete_messages(chat_id, callback.message.id)
+        if not check_membership(user_id):
+            show_mandatory_message(chat_id, language)
+        else:
+            user_data[chat_id]['step'] = 'awaiting_source'
+            app.send_message(chat_id, get_text('awaiting_source', language))
 
 @app.on_callback_query(filters.regex("^check_join$"))
 def verify_join(client, callback):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
-    lang = user_data[chat_id].get('lang', 'en')
+    language = user_data.get(chat_id, {}).get('language', 'en')
 
     if check_membership(user_id):
         app.delete_messages(chat_id, user_data[chat_id]["mandatory_msg"])
         user_data[chat_id]['step'] = 'awaiting_source'
-        app.send_message(chat_id, translations[lang]["verify_join"])
+        app.send_message(chat_id, get_text('verification', language))
     else:
         app.answer_callback_query(
             callback.id,
-            translations[lang]["invalid_input"],
+            get_text('mandatory', language),
             show_alert=True
         )
 
@@ -256,23 +283,23 @@ def verify_join(client, callback):
 def main_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    lang = user_data[chat_id].get('lang', 'en')
+    language = user_data.get(chat_id, {}).get('language', 'en')
 
     if (remaining := check_cooldown(user_id)) > 0:
-        app.send_message(chat_id, translations[lang]["cooldown"].format(remaining))
+        app.send_message(chat_id, get_text('cooldown', language).format(remaining))
         return
 
     if not check_membership(user_id):
-        show_mandatory_message(chat_id, lang)
+        show_mandatory_message(chat_id, language)
         message.delete()
         return
 
     if not message.photo:
-        app.send_message(chat_id, translations[lang]["invalid_input"])
+        app.send_message(chat_id, get_text('invalid_input', language))
         return
 
     if chat_id not in user_data:
-        user_data[chat_id] = {"step": "awaiting_source", "lang": lang}
+        user_data[chat_id] = {"step": "awaiting_source", "language": language}
 
     try:
         if user_data[chat_id].get("step") == "awaiting_source":
@@ -282,36 +309,34 @@ def main_handler(client, message):
                 "source": source_path,
                 "step": "awaiting_target"
             })
-            app.send_message(chat_id, translations[lang]["source_image"])
+            app.send_message(chat_id, get_text('awaiting_target', language))
 
         elif user_data[chat_id].get("step") == "awaiting_target":
             file_id = message.photo.file_id
             target_path = download_file(client, file_id, f"{chat_id}_target.jpg")
 
-            # Process images and get both result path and URL
             result_path, result_url = process_face_swap(
                 chat_id,
                 user_data[chat_id]["source"],
-                target_path
+                target_path,
+                language
             )
 
-            # Send the actual swapped image
             app.send_photo(
                 chat_id, 
-                photo=result_path,  # Send the swapped image file
-                caption=f"{translations[lang]['processing_complete']}{result_url}"
+                photo=result_path,
+                caption=get_text('result', language).format(result_url)
             )
 
-            # Update cooldown and cleanup
             update_cooldown(user_id)
             os.remove(user_data[chat_id]["source"])
             os.remove(target_path)
-            os.remove(result_path)  # Cleanup the result file
+            os.remove(result_path)
             del user_data[chat_id]
 
         else:
-            user_data[chat_id] = {"step": "awaiting_source", "lang": lang}
-            app.send_message(chat_id, translations[lang]["source_image"])
+            user_data[chat_id] = {"step": "awaiting_source", "language": language}
+            app.send_message(chat_id, get_text('awaiting_source', language))
 
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"❌ Critical Error: {str(e)}")
@@ -319,7 +344,7 @@ def main_handler(client, message):
             if "source" in user_data[chat_id]:
                 os.remove(user_data[chat_id]["source"])
             del user_data[chat_id]
-        app.send_message(chat_id, translations[lang]["error"])
+        app.send_message(chat_id, get_text('error', language))
 
 if __name__ == "__main__":
     print("🤖 FaceSwap Bot Activated!")
