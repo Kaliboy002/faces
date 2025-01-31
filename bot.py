@@ -62,9 +62,9 @@ translations = {
         "verify_join": "✅ Verification successful! Send source image now.",
         "join_channel": "Join Channel",
         "verify": "Verify Join",
-        "source_image": "📸 Source image received. Now send the target image for face swap.",
+        "source_image": "📸 Send the source image (face to swap)",
         "target_image": "📸 Send the target image (face to replace)",
-        "processing": "⏳ Processing... {}%",
+        "processing": "⏳ Processing...",
         "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
         "cooldown": "⏳ Please wait {} seconds before next swap!",
         "invalid_input": "🤨 Error: Invalid input. Please send a photo.",
@@ -83,16 +83,16 @@ translations = {
         "verify_join": "✅ تایید با موفقیت انجام شد! عکس منبع خود را ارسال کنید.",
         "join_channel": "پیوستن به کانال",
         "verify": "تایید",
-        "source_image": "📸 عکس منبع دریافت شد. حالا عکس هدف را برای جابه‌جایی چهره ارسال کنید.",
+        "source_image": "📸 عکس منبع خود را ارسال کنید",
         "target_image": "📸 عکس هدف خود را ارسال کنید",
-        "processing": "⏳ در حال پروسیس... {}%",
+        "processing": "⏳ در حال پروسیس...",
         "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
         "cooldown": "⏳ لطفا {} ثانیه دیگر انتظار دهید!",
         "invalid_input": "🤨 خطا: ورودی نامعتبر. لطفا یک عکس ارسال کنید.",
         "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید.",
         "not_joined_alert": "😐 شما عضو نشده‌اید. باید عضو شوید و سپس روی تایید کلیک کنید.",
         "welcome_caption": "سلام {username}، به بات جابه‌جایی چهره خوش آمدید! لطفا عکس اصلی خود را ارسال کنید.",
-        "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
+        "help_message": "سلام، حال شما چطوره؟ شما میتوانید از این بات به صورت رایگان استفاده کنید.",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
         "help_button": "راهنما"
@@ -161,27 +161,9 @@ def show_mandatory_message(chat_id, lang="en"):
     )
     user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
-def progress_updater(chat_id, message_id, lang):
-    progress = 0
-    while progress < 100:
-        try:
-            app.edit_message_text(
-                chat_id,
-                message_id,
-                translations[lang]["processing"].format(progress)
-            )
-            time.sleep(1)
-            progress += 10
-        except:
-            break
-
 def process_face_swap(chat_id, source_path, target_path):
     lang = user_data[chat_id].get('lang', 'en')
-    progress_msg = app.send_message(chat_id, translations[lang]["processing"].format(0))
-
-    # Start progress updater
-    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, lang))
-    thread.start()
+    progress_msg = app.send_message(chat_id, translations[lang]['processing'])
 
     try:
         api = api_queue.get()
@@ -193,28 +175,24 @@ def process_face_swap(chat_id, source_path, target_path):
         )
         result_url = upload_to_catbox(result)
         app.delete_messages(chat_id, progress_msg.id)
-        return result, result_url  # Return both result path and URL
+        return result, result_url
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
         raise
     finally:
         api_queue.put(api)
-        thread.join()
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
-    # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("English", callback_data="lang_en"),
             InlineKeyboardButton("Persian", callback_data="lang_fa")
         ]
     ])
-
-    # Send welcome message with language selection
     sent = app.send_message(chat_id, translations["en"]["welcome"], reply_markup=keyboard)
     user_data[chat_id] = {"start_msg": sent.id}
 
@@ -224,24 +202,18 @@ def language_callback(client, callback):
     user_id = callback.from_user.id
     lang = callback.data.split('_')[1]
 
-    # Delete the language selection message
     app.delete_messages(chat_id, user_data[chat_id]["start_msg"])
-
-    # Store selected language in user_data
     user_data[chat_id] = {'lang': lang}
 
-    # Proceed with mandatory join check
     if not check_membership(user_id):
         show_mandatory_message(chat_id, lang)
     else:
         send_welcome_message(chat_id, user_id, lang)
 
 def send_welcome_message(chat_id, user_id, lang):
-    # Welcome photo URL
     photo_url = "https://files.catbox.moe/tv24yp.jpg"
     username = app.get_users(user_id).first_name
 
-    # Welcome message with photo and buttons
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(translations[lang]["change_lang"], callback_data="change_lang"),
@@ -276,14 +248,12 @@ def change_language_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
 
-    # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("English", callback_data="lang_en"),
             InlineKeyboardButton("Persian", callback_data="lang_fa")
         ]
     ])
-
     app.send_message(chat_id, translations[user_data.get(chat_id, {}).get('lang', 'en')]["select_lang"], reply_markup=keyboard)
 
 @app.on_callback_query(filters.regex("^help$"))
@@ -291,7 +261,6 @@ def help_callback(client, callback):
     chat_id = callback.message.chat.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
-    # Help message with Back button
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
     ])
@@ -303,7 +272,6 @@ def back_to_welcome_callback(client, callback):
     user_id = callback.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
-    # Send welcome message again
     send_welcome_message(chat_id, user_id, lang)
 
 @app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
@@ -345,31 +313,28 @@ def main_handler(client, message):
                 "source": source_path,
                 "step": "awaiting_target"
             })
-            app.send_message(chat_id, translations[lang]["source_image"])
+            app.send_message(chat_id, translations[lang]["target_image"])
 
         elif user_data[chat_id].get("step") == "awaiting_target":
             file_id = message.photo.file_id
             target_path = download_file(client, file_id, f"{chat_id}_target.jpg")
 
-            # Process images and get both result path and URL
             result_path, result_url = process_face_swap(
                 chat_id,
                 user_data[chat_id]["source"],
                 target_path
             )
 
-            # Send the actual swapped image
             app.send_photo(
                 chat_id, 
-                photo=result_path,  # Send the swapped image file
+                photo=result_path,
                 caption=f"{translations[lang]['processing_complete']}{result_url}"
             )
 
-            # Update cooldown and cleanup
             update_cooldown(user_id)
             os.remove(user_data[chat_id]["source"])
             os.remove(target_path)
-            os.remove(result_path)  # Cleanup the result file
+            os.remove(result_path)
             del user_data[chat_id]
 
         else:
