@@ -1,15 +1,15 @@
 import os
-import time
 import requests
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup  # Added for buttons
 
-# Teleتgram Bot Token and API Information
+# Telegram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
-BOT_TOKEN = "7844051995:AAGY4U4XSAl7duM5SyaQS2VHecrpGsFQW7w"  # Replace with your Telegram Bot Token
+BOT_TOKEN = "7844051995:AAHTkN2eJswu-CAfe74amMUGok_jaMK0hXQ"  # Replace with your Telegram Bot Token
 ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
+CHANNEL_USERNAME = "@Kali_Linux_BOTS"  # Replace with your channel username
 
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -22,10 +22,6 @@ api_clients = [
 ]
 current_client_index = 0
 user_data = {}
-
-# Cooldown tracking
-cooldown_times = {}
-language_data = {}
 
 def get_client():
     global current_client_index
@@ -51,81 +47,57 @@ def upload_to_catbox(file_path):
                 files={"fileToUpload": f}
             )
             response.raise_for_status()
-            return response.text.strip()
+        return response.text.strip()
     except Exception as e:
         raise Exception(f"Failed to upload file to Catbox: {e}")
 
-def reset_user_data(chat_id):
-    if chat_id in user_data:
-        user_data.pop(chat_id, None)
-
-def cleanup_files(chat_id):
-    if chat_id in user_data:
-        for key in ["source_image", "target_image"]:
-            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
-                os.remove(user_data[chat_id][key])
-
-def get_language_text(chat_id, key):
-    language = language_data.get(chat_id, "fa")  # Default to Persian
-    if language == "fa":
-        return {
-            "welcome": "خوش آمدید به ربات تغییر چهره! لطفاً تصویر منبع را ارسال کنید (چهره برای تغییر).",
-            "await_target": "عالی! حالا تصویر هدف (چهره مقصد) را ارسال کنید.",
-            "processing": "در حال پردازش درخواست شما، لطفاً صبور باشید...",
-            "swap_complete": "تصویر تغییر چهره شده: ",
-            "wait_for_cooldown": "لطفاً تا تکمیل پردازش تصویر صبر کنید.",
-            "image_received": "تصویر دریافت شده است، لطفاً منتظر پردازش بمانید.",
-            "start_message": "لطفاً ابتدا زبان خود را انتخاب کنید:\n1. انگلیسی\n2. فارسی"
-        }.get(key, "")
-    return {
-        "welcome": "Welcome to the Face Swap Bot! Please send the source image (face to swap).",
-        "await_target": "Great! Now send the target image (destination face).",
-        "processing": "Processing your request, please wait...",
-        "swap_complete": "Face-swapped image: ",
-        "wait_for_cooldown": "Please wait until the cooldown period is over.",
-        "image_received": "Image received, please wait for processing.",
-        "start_message": "Please first select your language:\n1. English\n2. فارسی"
-    }.get(key, "")
-
+# Modified start command with mandatory join check
 @app.on_message(filters.command("start"))
 def start(client, message):
     chat_id = message.chat.id
-    user_data[chat_id] = {"step": "awaiting_source"}
-    client.send_message(
-        chat_id,
-        get_language_text(chat_id, "start_message"),
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("English", callback_data="lang_en")],
-                [InlineKeyboardButton("فارسی", callback_data="lang_fa")]
-            ]
-        )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
+        [InlineKeyboardButton("Check", callback_data="check_join")]
+    ])
+    sent_message = message.reply_text(
+        "**Mandatory Join**\nYou must join our channel to use this bot!",
+        reply_markup=keyboard
     )
+    user_data[chat_id] = {"mandatory_message_id": sent_message.id}
 
-@app.on_callback_query(filters.regex("lang_"))
-def language_selection(client, callback_query):
+# Callback handler for join verification
+@app.on_callback_query(filters.create(lambda _, __, query: query.data == "check_join"))
+def check_join(client, callback_query):
     chat_id = callback_query.message.chat.id
-    lang = callback_query.data.split("_")[1]
-    language_data[chat_id] = lang
-    client.answer_callback_query(callback_query.id)
-    client.send_message(chat_id, get_language_text(chat_id, "welcome"))
+    user_id = callback_query.from_user.id
+    try:
+        # Check if user joined channel
+        client.get_chat_member(CHANNEL_USERNAME, user_id)
+        
+        # Delete mandatory message
+        if chat_id in user_data and "mandatory_message_id" in user_data[chat_id]:
+            client.delete_messages(chat_id, user_data[chat_id]["mandatory_message_id"])
+            del user_data[chat_id]["mandatory_message_id"]
+        
+        # Initialize normal bot flow
+        user_data[chat_id] = {"step": "awaiting_source"}
+        client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
+        
+    except Exception as e:
+        client.answer_callback_query(
+            callback_query.id,
+            "⛔ You haven't joined the channel! Please join and click Check again.",
+            show_alert=True
+        )
+    finally:
+        callback_query.answer()
 
+# Existing photo handling functions remain the same
 @app.on_message(filters.photo)
 def handle_photo(client, message):
     chat_id = message.chat.id
-
-    # Cooldown check
-    if chat_id in cooldown_times:
-        remaining_time = cooldown_times[chat_id] - time.time()
-        if remaining_time > 0:
-            client.send_message(
-                chat_id,
-                f"{get_language_text(chat_id, 'wait_for_cooldown')} {int(remaining_time)} seconds."
-            )
-            return
-
     if chat_id not in user_data:
-        client.send_message(chat_id, get_language_text(chat_id, "start_message"))
+        client.send_message(chat_id, "Please start the bot using /start.")
         return
 
     step = user_data[chat_id].get("step", None)
@@ -136,7 +108,7 @@ def handle_photo(client, message):
             source_image_path = f"{chat_id}_source.jpg"
             user_data[chat_id]["source_image"] = download_file(client, file_id, source_image_path)
             user_data[chat_id]["step"] = "awaiting_target"
-            client.send_message(chat_id, get_language_text(chat_id, "await_target"))
+            client.send_message(chat_id, "Great! Now send the target image (destination face).")
 
         elif step == "awaiting_target":
             if "source_image" not in user_data[chat_id]:
@@ -147,7 +119,7 @@ def handle_photo(client, message):
             file_id = message.photo.file_id
             target_image_path = f"{chat_id}_target.jpg"
             user_data[chat_id]["target_image"] = download_file(client, file_id, target_image_path)
-            client.send_message(chat_id, get_language_text(chat_id, "processing"))
+            client.send_message(chat_id, "Processing your request, please wait...")
 
             # Perform Face Swap
             while True:
@@ -167,11 +139,7 @@ def handle_photo(client, message):
                     swapped_image_url = upload_to_catbox(result)
 
                     # Send the swapped image back to the user
-                    client.send_photo(chat_id, photo=result, caption=f"{get_language_text(chat_id, 'swap_complete')}{swapped_image_url}")
-
-                    # Set cooldown time
-                    cooldown_times[chat_id] = time.time() + 60  # 60 seconds cooldown
-
+                    client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
                     break
 
                 except Exception as e:
@@ -188,5 +156,15 @@ def handle_photo(client, message):
     except Exception as e:
         client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
         reset_user_data(chat_id)
+
+def reset_user_data(chat_id):
+    if chat_id in user_data:
+        user_data.pop(chat_id, None)
+
+def cleanup_files(chat_id):
+    if chat_id in user_data:
+        for key in ["source_image", "target_image"]:
+            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
+                os.remove(user_data[chat_id][key])
 
 app.run()
