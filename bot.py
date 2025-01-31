@@ -74,8 +74,7 @@ translations = {
         "help_message": "Hi, how are you? You can use this bot for free.",
         "back_button": "Back",
         "change_lang": "Change Language",
-        "help_button": "Help",
-        "processing_error": "⚠️ Your photo is already being processed. Please wait."
+        "help_button": "Help"
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -96,8 +95,7 @@ translations = {
         "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
-        "help_button": "راهنما",
-        "processing_error": "⚠️ عکس شما در حال پردازش است. لطفا منتظر بمانید."
+        "help_button": "راهنما"
     }
 }
 
@@ -225,9 +223,6 @@ def language_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
     lang = callback.data.split('_')[1]
-
-    # Delete the language selection message
-    app.delete_messages(chat_id, user_data[chat_id]["start_msg"])
 
     # Store selected language in user_data
     user_data[chat_id] = {'lang': lang}
