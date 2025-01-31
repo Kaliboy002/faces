@@ -143,11 +143,12 @@ def upload_to_catbox(file_path):
             response = requests.post(
                 "https://catbox.moe/user/api.php",
                 files={"fileToUpload": f},
-                data={"reqtype": "fileupload"}
+                data={"reqtype": "fileupload"},
+                timeout=10  # Set timeout to 10 seconds
             )
             response.raise_for_status()
         return response.text.strip()
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         raise Exception(f"Upload failed: {e}")
 
 def show_mandatory_message(chat_id, lang="en"):
@@ -162,17 +163,15 @@ def show_mandatory_message(chat_id, lang="en"):
     user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
 def progress_updater(chat_id, message_id, start_time):
-    elapsed = 0
-    while elapsed < 30:
+    progress_steps = [1, 15, 24, 38, 49, 55, 67, 75, 86, 95, 100]
+    for progress in progress_steps:
         try:
-            progress = min(elapsed * 3, 100)
             app.edit_message_text(
                 chat_id,
                 message_id,
-                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%\nEstimated time: {30 - elapsed}s remaining"
+                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%"
             )
-            time.sleep(5)
-            elapsed += 5
+            time.sleep(3)  # Adjust sleep time as needed
         except:
             break
 
@@ -224,6 +223,9 @@ def language_callback(client, callback):
     user_id = callback.from_user.id
     lang = callback.data.split('_')[1]
 
+    # Delete the language selection message
+    app.delete_messages(chat_id, callback.message.id)
+
     # Store selected language in user_data
     user_data[chat_id] = {'lang': lang}
 
@@ -273,6 +275,9 @@ def change_language_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
 
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
     # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
         [
@@ -288,6 +293,9 @@ def help_callback(client, callback):
     chat_id = callback.message.chat.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
     # Help message with Back button
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
@@ -299,6 +307,9 @@ def back_to_welcome_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
 
     # Send welcome message again
     send_welcome_message(chat_id, user_id, lang)
