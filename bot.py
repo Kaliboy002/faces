@@ -2,7 +2,9 @@ import os
 import time
 import requests
 import threading
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -33,17 +35,25 @@ COOLDOWN_TIME = 80  # seconds
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Face Swap API Configuration
-api_clients = [
-    "Kaliboy0012/face-swapm",
-    "Jonny0101/Image-Face-Swap",
-    "kmuti/face-swap"
+# API Configuration with Multiple Instances
+api_config = [
+    {"url": "Kaliboy002/face-swapm", "instances": 3},
+    {"url": "Jonny001/Image-Face-Swap", "instances": 3},
+    {"url": "kmuti/face-swap", "instances": 3}
 ]
-current_client_index = 0
-user_data = {}
+
+# Create API Pool with Multiple Instances
+api_pool = Queue()
+for api in api_config:
+    for _ in range(api["instances"]):
+        api_pool.put(Client(api["url"]))
 
 # Thread Pool for Parallel Processing
-executor = ThreadPoolExecutor(max_workers=10)  # Handle up to 10 concurrent swaps
+executor = ThreadPoolExecutor(max_workers=15)  # 3 APIs × 5 instances = 15 workers
+
+# User Data and State Management
+user_data = {}
+active_swaps = set()
 
 def get_mandatory_status():
     return settings_collection.find_one({"_id": "mandatory_join"})["enabled"]
@@ -78,14 +88,6 @@ def check_membership(user_id):
     except:
         return False
 
-def get_client():
-    global current_client_index
-    return Client(api_clients[current_client_index])
-
-def switch_client():
-    global current_client_index
-    current_client_index = (current_client_index + 1) % len(api_clients)
-
 def download_file(client, file_id, save_as):
     try:
         return client.download_media(file_id, file_name=save_as)
@@ -117,51 +119,56 @@ def show_mandatory_message(chat_id):
     )
     user_data[chat_id] = {"mandatory_msg": sent.id}
 
-def progress_updater(chat_id, message_id, start_time):
-    elapsed = 0
-    while elapsed < 30:  # Max 30 seconds progress
+async def progress_updater(chat_id, message_id):
+    start_time = time.time()
+    while time.time() - start_time < 30:
         try:
-            progress = min(elapsed * 3, 100)  # Fake progress %
-            app.edit_message_text(
+            elapsed = int(time.time() - start_time)
+            remaining = 30 - elapsed
+            progress = min(elapsed * 3, 100)
+            await app.edit_message_text(
                 chat_id,
                 message_id,
-                f"⏳ Processing... {progress}%\nEstimated time: {30 - elapsed}s remaining"
+                f"⚡ Processing... {progress}%\nEstimated time: {remaining}s remaining"
             )
-            time.sleep(5)
-            elapsed += 5
+            await asyncio.sleep(5)
         except:
             break
 
-def process_face_swap(chat_id, source_path, target_path):
-    start_time = time.time()
-    progress_msg = app.send_message(chat_id, "⏳ Starting processing...")
-    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
-    thread.start()
-    
+def process_swap_wrapper(chat_id, source_path, target_path):
     try:
-        future = executor.submit(_process_swap, source_path, target_path)
-        result_url = future.result()  # Wait for completion
-        app.delete_messages(chat_id, progress_msg.id)
-        return result_url
+        api = api_pool.get()
+        result = api.predict(
+            source_file=file(source_path),
+            target_file=file(target_path),
+            doFaceEnhancer=True,
+            api_name="/predict"
+        )
+        return upload_to_catbox(result)
     except Exception as e:
-        app.send_message(ADMIN_CHAT_ID, f"⚠️ Processing Error: {str(e)}")
+        # Replace faulty API client
+        api_pool.put(Client(api.config["url"]))
         raise
     finally:
-        thread.join()
+        api_pool.put(api)
 
-def _process_swap(source_path, target_path):
-    while True:
-        try:
-            api = get_client()
-            result = api.predict(
-                source_file=file(source_path),
-                target_file=file(target_path),
-                doFaceEnhancer=True,
-                api_name="/predict"
-            )
-            return upload_to_catbox(result)
-        except Exception as e:
-            switch_client()
+async def handle_swap(chat_id, source_path, target_path):
+    progress_msg = await app.send_message(chat_id, "🚀 Starting face swap...")
+    asyncio.create_task(progress_updater(chat_id, progress_msg.id))
+    
+    try:
+        loop = asyncio.get_event_loop()
+        result_url = await loop.run_in_executor(
+            executor,
+            process_swap_wrapper,
+            chat_id, source_path, target_path
+        )
+        
+        await app.delete_messages(chat_id, progress_msg.id)
+        return result_url
+    except Exception as e:
+        await app.send_message(ADMIN_CHAT_ID, f"⚠️ Swap Error: {str(e)}")
+        raise
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
@@ -242,22 +249,8 @@ def main_handler(client, message):
             file_id = message.photo.file_id
             target_path = download_file(client, file_id, f"{chat_id}_target.jpg")
             
-            # Process images
-            result_url = process_face_swap(
-                chat_id,
-                user_data[chat_id]["source"],
-                target_path
-            )
-            
-            # Send result
-            app.send_photo(
-                chat_id, 
-                photo=target_path,
-                caption=f"✨ Face swap completed!\n🔗 URL: {result_url}"
-            )
-            
-            # Update cooldown
-            update_cooldown(user_id)
+            # Start async processing
+            asyncio.create_task(process_swap(chat_id, user_data[chat_id]["source"], target_path))
             
             # Cleanup
             os.remove(user_data[chat_id]["source"])
@@ -275,6 +268,18 @@ def main_handler(client, message):
                 os.remove(user_data[chat_id]["source"])
             del user_data[chat_id]
         app.send_message(chat_id, "⚠️ An error occurred. Please try again.")
+
+async def process_swap(chat_id, source_path, target_path):
+    try:
+        result_url = await handle_swap(chat_id, source_path, target_path)
+        await app.send_photo(
+            chat_id, 
+            photo=target_path,
+            caption=f"✨ Face swap completed!\n🔗 URL: {result_url}"
+        )
+        update_cooldown(chat_id)
+    except Exception as e:
+        await app.send_message(chat_id, "⚠️ Failed to process swap. Please try again.")
 
 if __name__ == "__main__":
     print("🤖 FaceSwap Bot Activated!")
