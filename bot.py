@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,6 +41,9 @@ api_clients = [
 ]
 current_client_index = 0
 user_data = {}
+
+# Thread Pool for Parallel Processing
+executor = ThreadPoolExecutor(max_workers=10)  # Handle up to 10 concurrent swaps
 
 def get_mandatory_status():
     return settings_collection.find_one({"_id": "mandatory_join"})["enabled"]
@@ -128,6 +132,37 @@ def progress_updater(chat_id, message_id, start_time):
         except:
             break
 
+def process_face_swap(chat_id, source_path, target_path):
+    start_time = time.time()
+    progress_msg = app.send_message(chat_id, "⏳ Starting processing...")
+    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
+    thread.start()
+    
+    try:
+        future = executor.submit(_process_swap, source_path, target_path)
+        result_url = future.result()  # Wait for completion
+        app.delete_messages(chat_id, progress_msg.id)
+        return result_url
+    except Exception as e:
+        app.send_message(ADMIN_CHAT_ID, f"⚠️ Processing Error: {str(e)}")
+        raise
+    finally:
+        thread.join()
+
+def _process_swap(source_path, target_path):
+    while True:
+        try:
+            api = get_client()
+            result = api.predict(
+                source_file=file(source_path),
+                target_file=file(target_path),
+                doFaceEnhancer=True,
+                api_name="/predict"
+            )
+            return upload_to_catbox(result)
+        except Exception as e:
+            switch_client()
+
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
     message.delete()
@@ -164,31 +199,6 @@ def verify_join(client, callback):
             "❌ You haven't joined the channel!",
             show_alert=True
         )
-
-def process_face_swap(chat_id, source_path, target_path):
-    start_time = time.time()
-    progress_msg = app.send_message(chat_id, "⏳ Starting processing...")
-    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
-    thread.start()
-    
-    try:
-        while True:
-            try:
-                api = get_client()
-                result = api.predict(
-                    source_file=file(source_path),
-                    target_file=file(target_path),
-                    doFaceEnhancer=True,
-                    api_name="/predict"
-                )
-                result_url = upload_to_catbox(result)
-                app.delete_messages(chat_id, progress_msg.id)
-                return result_url
-            except Exception as e:
-                app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
-                switch_client()
-    finally:
-        thread.join()
 
 @app.on_message(filters.photo | filters.text)
 def main_handler(client, message):
