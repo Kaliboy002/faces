@@ -1,4 +1,3 @@
-
 import os
 import time
 import requests
@@ -206,7 +205,6 @@ def process_face_swap(chat_id, source_path, target_path):
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
-    message.delete()
     chat_id = message.chat.id
     user_id = message.from_user.id
 
