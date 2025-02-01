@@ -31,6 +31,9 @@ ADMIN_CHAT_ID = 7046488481
 CHANNEL_USERNAME = "@Kali_Linux_BOTS"
 COOLDOWN_TIME = 10  # seconds
 
+# ImgBB API Key
+IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
+
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -74,8 +77,7 @@ translations = {
         "help_message": "Hi, how are you? You can use this bot for free.",
         "back_button": "Back",
         "change_lang": "Change Language",
-        "help_button": "Help",
-        "processing_error": "⚠️ Your photo is already being processed. Please wait."
+        "help_button": "Help"
     },
     "fa": {
         "welcome": "🤖 بات جابه جای چهره\nلطفا زبان خود را انتخاب کنید.",
@@ -96,8 +98,7 @@ translations = {
         "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
-        "help_button": "راهنما",
-        "processing_error": "⚠️ عکس شما در حال پردازش است. لطفا منتظر بمانید."
+        "help_button": "راهنما"
     }
 }
 
@@ -139,17 +140,19 @@ def download_file(client, file_id, save_as):
     except Exception as e:
         raise Exception(f"Download failed: {e}")
 
-def upload_to_catbox(file_path):
+def upload_to_imgbb(file_path):
     try:
         with open(file_path, "rb") as f:
             response = requests.post(
-                "https://catbox.moe/user/api.php",
-                files={"fileToUpload": f},
-                data={"reqtype": "fileupload"}
+                "https://api.imgbb.com/1/upload",
+                files={"image": f},
+                data={"key": IMGBB_API_KEY},
+                timeout=10  # Set timeout to 10 seconds
             )
             response.raise_for_status()
-        return response.text.strip()
-    except Exception as e:
+            json_response = response.json()
+            return json_response["data"]["url"]
+    except requests.exceptions.RequestException as e:
         raise Exception(f"Upload failed: {e}")
 
 def show_mandatory_message(chat_id, lang="en"):
@@ -164,17 +167,15 @@ def show_mandatory_message(chat_id, lang="en"):
     user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
 def progress_updater(chat_id, message_id, start_time):
-    elapsed = 0
-    while elapsed < 30:
+    progress_steps = [1, 15, 24, 38, 49, 55, 67, 75, 86, 95, 100]
+    for progress in progress_steps:
         try:
-            progress = min(elapsed * 3, 100)
             app.edit_message_text(
                 chat_id,
                 message_id,
-                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%\nEstimated time: {30 - elapsed}s remaining"
+                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%"
             )
-            time.sleep(5)
-            elapsed += 5
+            time.sleep(3)  # Adjust sleep time as needed
         except:
             break
 
@@ -193,7 +194,7 @@ def process_face_swap(chat_id, source_path, target_path):
             doFaceEnhancer=True,
             api_name="/predict"
         )
-        result_url = upload_to_catbox(result)
+        result_url = upload_to_imgbb(result)
         app.delete_messages(chat_id, progress_msg.id)
         return result, result_url  # Return both result path and URL
     except Exception as e:
@@ -227,7 +228,7 @@ def language_callback(client, callback):
     lang = callback.data.split('_')[1]
 
     # Delete the language selection message
-    app.delete_messages(chat_id, user_data[chat_id]["start_msg"])
+    app.delete_messages(chat_id, callback.message.id)
 
     # Store selected language in user_data
     user_data[chat_id] = {'lang': lang}
@@ -278,6 +279,9 @@ def change_language_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
 
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
     # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
         [
@@ -293,6 +297,9 @@ def help_callback(client, callback):
     chat_id = callback.message.chat.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
     # Help message with Back button
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
@@ -304,6 +311,9 @@ def back_to_welcome_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
 
     # Send welcome message again
     send_welcome_message(chat_id, user_id, lang)
