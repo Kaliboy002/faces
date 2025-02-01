@@ -2,7 +2,7 @@ import os
 import requests
 from pyrogram import Client, filters
 
-# Replace with your credentials
+# Replace these with your credentials
 API_ID = "15787995"
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
@@ -19,23 +19,29 @@ def enhance_image(client, message):
 
     # Download the image
     file_path = client.download_media(message.photo.file_id)
-    
-    # Upload image to a temporary file-sharing service (you may need to replace this)
-    url = f"https://tmpfiles.org/dl/20185272/{os.path.basename(file_path)}"
 
-    # API request
-    api_url = f"https://ar-api-08uk.onrender.com/remini?url={url}"
-    response = requests.get(api_url)
+    # Upload to tmpfiles.org
+    with open(file_path, "rb") as file:
+        upload_response = requests.post("https://tmpfiles.org/api/v1/upload", files={"file": file})
     
-    if response.status_code == 200:
-        data = response.json()
-        if data.get("status") == 200:
-            enhanced_url = data.get("result")
-            message.reply_photo(enhanced_url, caption="✅ Here is your enhanced image!")
+    if upload_response.status_code == 200 and upload_response.json().get("data"):
+        tmp_url = upload_response.json()["data"]["url"]
+        
+        # Send request to enhancement API
+        api_url = f"https://ar-api-08uk.onrender.com/remini?url={tmp_url}"
+        response = requests.get(api_url)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == 200:
+                enhanced_url = data.get("result")
+                message.reply_photo(enhanced_url, caption="✅ Here is your enhanced image!")
+            else:
+                message.reply_text("❌ Error enhancing the image.")
         else:
-            message.reply_text("❌ Error enhancing the image.")
+            message.reply_text("❌ API request failed.")
     else:
-        message.reply_text("❌ API request failed.")
+        message.reply_text("❌ Failed to upload image for processing.")
 
     msg.delete()
     os.remove(file_path)  # Clean up
