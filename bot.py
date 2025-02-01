@@ -17,13 +17,13 @@ def start(client, message):
 def enhance_image(client, message):
     msg = message.reply_text("🔄 Enhancing your image, please wait...")
 
-    # Download the image
+    # Download the user's image
     file_path = client.download_media(message.photo.file_id)
 
     # Upload to tmpfiles.org
     with open(file_path, "rb") as file:
         upload_response = requests.post("https://tmpfiles.org/api/v1/upload", files={"file": file})
-    
+
     if upload_response.status_code == 200 and upload_response.json().get("data"):
         tmp_url = upload_response.json()["data"]["url"]
         
@@ -35,7 +35,18 @@ def enhance_image(client, message):
             data = response.json()
             if data.get("status") == 200:
                 enhanced_url = data.get("result")
-                message.reply_photo(enhanced_url, caption="✅ Here is your enhanced image!")
+
+                # 🔽 **Download the enhanced image**
+                enhanced_image_path = "enhanced_image.jpg"
+                img_data = requests.get(enhanced_url).content
+                with open(enhanced_image_path, "wb") as img_file:
+                    img_file.write(img_data)
+
+                # 📤 **Send the downloaded image instead of the URL**
+                message.reply_photo(enhanced_image_path, caption="✅ Here is your enhanced image!")
+
+                # Cleanup
+                os.remove(enhanced_image_path)
             else:
                 message.reply_text("❌ Error enhancing the image.")
         else:
@@ -44,6 +55,6 @@ def enhance_image(client, message):
         message.reply_text("❌ Failed to upload image for processing.")
 
     msg.delete()
-    os.remove(file_path)  # Clean up
+    os.remove(file_path)  # Cleanup original file
 
 bot.run()
