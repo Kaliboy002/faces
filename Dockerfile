@@ -18,8 +18,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the current directory contents into the container
 COPY . .
 
-# Expose port (optional, for debugging)
-EXPOSE 8000
-
 # Run the bot
 CMD ["python", "bot.py"]
