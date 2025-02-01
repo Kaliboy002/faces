@@ -51,6 +51,10 @@ def enhance_image(client, message: Message):
         if not enhanced_image_url:
             raise Exception("No enhanced image URL found in the API response.")
 
+        # Check if the enhanced image URL is valid
+        if not enhanced_image_url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+            raise Exception("Enhanced image URL is not a valid image file.")
+
         # Send the enhanced image back to the user
         message.reply_photo(enhanced_image_url, caption="Here's your enhanced image!")
 
