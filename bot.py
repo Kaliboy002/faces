@@ -1,4 +1,3 @@
-fuck instard of making it speedful it become so delayed and also the processing ... not showing in this code below something unnecessary and cause errors and delay also make it quickly and request the api as soon as possible your previous code was awful it was delayed not speed 🤨💔
 
 import os
 import time
@@ -401,5 +400,3 @@ def main_handler(client, message):
 if __name__ == "__main__":
     print("🤖 FaceSwap Bot Activated!")
     app.run()
-
-send me full code with working 
