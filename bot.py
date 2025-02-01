@@ -21,8 +21,8 @@ app = Client(
     bot_token=os.getenv("BOT_TOKEN")
 )
 
-# Initialize Gradio client for Motion Blur API
-GRADIO_CLIENT = GradioClient("Gyufyjk/motion-blur")
+# Initialize Gradio client for Motion Blur API (Hugging Face Space)
+GRADIO_CLIENT = GradioClient("CharlieAmalet/Tools3ox_Background-Motion-Blur_Api")
 
 # Catbox API URL
 CATBOX_URL = "https://catbox.moe/user/api.php"
@@ -46,36 +46,9 @@ def upload_to_catbox(image_path: str) -> str:
 async def start(client: Client, message: Message):
     """Handles the /start command."""
     await message.reply_text(
-        "👋 Hello! Send me a photo, and I'll apply motion blur to the background while keeping the subject clear.\n\n"
-        "Use /blur <distance> <amount> <subject> to customize the blur effect.\n\n"
-        "Example: `/blur 100 0.75 1`"
+        "👋 Hello! Please send me a photo to apply motion blur to the background while keeping the subject clear.\n\n"
+        "I will process your photo and send it back to you after applying the effect!"
     )
-
-# Blur command handler
-@app.on_message(filters.command("blur"))
-async def blur_command(client: Client, message: Message):
-    """Handles the /blur command to set custom blur parameters."""
-    try:
-        # Extract parameters from the command
-        _, distance, amount, subject = message.text.split()
-        distance = float(distance)
-        amount = float(amount)
-        subject = float(subject)
-
-        # Validate parameters
-        if not (0 <= distance <= 500 and 0 <= amount <= 1 and 0 <= subject <= 1):
-            await message.reply_text("Invalid parameters. Ensure:\n"
-                                    "- Blur Distance: 0 to 500\n"
-                                    "- Blur Amount: 0.0 to 1.0\n"
-                                    "- Subject Amount: 0.0 to 1.0")
-            return
-
-        # Ask for a photo
-        await message.reply_text("Now send me a photo to process with these settings!")
-    except Exception as e:
-        await message.reply_text("Invalid command format. Use:\n"
-                                "`/blur <distance> <amount> <subject>`\n\n"
-                                "Example: `/blur 100 0.75 1`")
 
 # Photo message handler
 @app.on_message(filters.photo)
@@ -86,31 +59,22 @@ async def process_photo(client: Client, message: Message):
         photo_path = await message.download()
 
         # Default blur parameters
-        blur_distance = 100
-        blur_amount = 0.75
-        subject_amount = 1
-
-        # Check if the user provided custom parameters
-        if message.caption and message.caption.startswith("/blur"):
-            try:
-                _, distance, amount, subject = message.caption.split()
-                blur_distance = float(distance)
-                blur_amount = float(amount)
-                subject_amount = float(subject)
-            except Exception as e:
-                logger.warning(f"Failed to parse blur parameters: {e}")
+        blur_distance = 200
+        blur_amount = 1
 
         # Process the photo using the Gradio API
         result = GRADIO_CLIENT.predict(
-            photo_path,          # Image path
-            blur_distance,       # Blur Distance
-            blur_amount,         # Blur Amount
-            subject_amount,      # Subject Amount
-            api_name="/predict"
+            img=photo_path,           # Image path
+            distance_blur=blur_distance, # Blur Distance
+            amount_blur=blur_amount,    # Blur Amount
+            api_name="/blur"
         )
 
+        # The result is the path of the processed image
+        result_image_path = result[0]
+
         # Upload the processed image to Catbox
-        catbox_url = upload_to_catbox(result)
+        catbox_url = upload_to_catbox(result_image_path)
         if not catbox_url:
             await message.reply_text("Failed to upload the processed image. Please try again.")
             return
@@ -118,15 +82,12 @@ async def process_photo(client: Client, message: Message):
         # Send the processed image back to the user
         await message.reply_photo(
             catbox_url,
-            caption=f"✅ Here's your processed image!\n\n"
-                    f"Blur Distance: {blur_distance}\n"
-                    f"Blur Amount: {blur_amount}\n"
-                    f"Subject Amount: {subject_amount}"
+            caption="✅ Here's your processed image with motion blur applied to the background!"
         )
 
         # Clean up downloaded files
         os.remove(photo_path)
-        os.remove(result)
+        os.remove(result_image_path)
     except Exception as e:
         logger.error(f"Error processing photo: {e}")
         await message.reply_text("An error occurred while processing your photo. Please try again.")
