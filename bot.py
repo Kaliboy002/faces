@@ -2,7 +2,7 @@ import os
 import logging
 import requests
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message
 from gradio_client import Client as GradioClient
 from dotenv import load_dotenv
 
