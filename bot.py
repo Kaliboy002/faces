@@ -2,7 +2,7 @@ import os
 import requests
 from pyrogram import Client, filters
 
-# Replace these with your credentials
+# Replace with your credentials
 API_ID = "15787995"
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
@@ -14,7 +14,7 @@ def upload_to_catbox(file_path):
                                  data={"reqtype": "fileupload"}, 
                                  files={"fileToUpload": file})
     if response.status_code == 200 and response.text.startswith("https"):
-        return response.text.strip()  # Return the direct image link
+        return response.text.strip()  # Return direct image link
     return None  # Return None if upload failed
 
 bot = Client("image_enhancer_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -27,10 +27,10 @@ def start(client, message):
 def enhance_image(client, message):
     msg = message.reply_text("🔄 Enhancing your image, please wait...")
 
-    # Download the user's image
+    # Download user's image
     file_path = client.download_media(message)
 
-    # Upload the original image to Catbox
+    # Upload original image to Catbox
     catbox_url = upload_to_catbox(file_path)
     if not catbox_url:
         message.reply_text("❌ Failed to upload image to Catbox. Try again!")
@@ -54,7 +54,8 @@ def enhance_image(client, message):
             # 📤 Upload the enhanced image to Catbox
             final_url = upload_to_catbox(enhanced_image_path)
             if final_url:
-                message.reply_photo(final_url, caption=f"✅ Here is your enhanced image!\n🔗 [Permanent Link]({final_url})", disable_web_page_preview=True)
+                message.reply_photo(final_url, caption="✅ Here is your enhanced image!")
+                message.reply_text(f"🔗 **Permanent Link:** {final_url}", disable_web_page_preview=True)
             else:
                 message.reply_text("✅ Here is your enhanced image (temporary):")
                 message.reply_photo(enhanced_image_path)
