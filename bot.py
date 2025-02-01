@@ -1,7 +1,11 @@
+fuck instard of making it speedful it become so delayed and also the processing ... not showing in this code below something unnecessary and cause errors and delay also make it quickly and request the api as soon as possible your previous code was awful it was delayed not speed 🤨💔
+
 import os
 import time
 import requests
+import threading
 from queue import Queue
+from concurrent.futures import ThreadPoolExecutor
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -29,9 +33,6 @@ ADMIN_CHAT_ID = 7046488481
 CHANNEL_USERNAME = "@Kali_Linux_BOTS"
 COOLDOWN_TIME = 10  # seconds
 
-# ImgBB API Key
-IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
-
 # Pyrogram Bot Initialization
 app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -47,6 +48,9 @@ api_pool = [Client(api) for api in api_clients for _ in range(5)]  # 5 instances
 api_queue = Queue()
 for api in api_pool:
     api_queue.put(api)
+
+# Thread Pool for Parallel Processing
+executor = ThreadPoolExecutor(max_workers=20)
 
 # User Data and State Management
 user_data = {}
@@ -135,22 +139,55 @@ def download_file(client, file_id, save_as):
     except Exception as e:
         raise Exception(f"Download failed: {e}")
 
-def upload_to_imgbb(file_path):
-    try:
-        with open(file_path, "rb") as f:
-            response = requests.post(
-                "https://api.imgbb.com/1/upload",
-                files={"image": f},
-                data={"key": IMGBB_API_KEY},
-                timeout=10  # Set timeout to 10 seconds
+def upload_to_catbox(file_path, retries=3):
+    for attempt in range(retries):
+        try:
+            with open(file_path, "rb") as f:
+                response = requests.post(
+                    "https://catbox.moe/user/api.php",
+                    files={"fileToUpload": f},
+                    data={"reqtype": "fileupload"},
+                    timeout=10  # Set timeout to 10 seconds
+                )
+                response.raise_for_status()
+            return response.text.strip()
+        except requests.exceptions.RequestException as e:
+            if attempt < retries - 1:
+                time.sleep(2)  # Wait before retrying
+                continue
+            raise Exception(f"Upload failed after {retries} attempts: {e}")
+
+def show_mandatory_message(chat_id, lang="en"):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(translations[lang]["join_channel"], url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
+        [InlineKeyboardButton(translations[lang]["verify"], callback_data="check_join")]
+    ])
+    sent = app.send_message(chat_id, 
+        translations[lang]["mandatory_join"],
+        reply_markup=keyboard
+    )
+    user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
+
+def progress_updater(chat_id, message_id, start_time):
+    progress_steps = [1, 15, 24, 38, 49, 55, 67, 75, 86, 95, 100]
+    for progress in progress_steps:
+        try:
+            app.edit_message_text(
+                chat_id,
+                message_id,
+                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%"
             )
-            response.raise_for_status()
-            json_response = response.json()
-            return json_response["data"]["url"]
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Upload failed: {e}")
+            time.sleep(3)  # Adjust sleep time as needed
+        except:
+            break
 
 def process_face_swap(chat_id, source_path, target_path):
+    start_time = time.time()
+    lang = user_data[chat_id].get('lang', 'en')
+    progress_msg = app.send_message(chat_id, translations[lang]['processing'])
+    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
+    thread.start()
+
     try:
         api = api_queue.get()
         result = api.predict(
@@ -159,13 +196,15 @@ def process_face_swap(chat_id, source_path, target_path):
             doFaceEnhancer=True,
             api_name="/predict"
         )
-        result_url = upload_to_imgbb(result)
+        result_url = upload_to_catbox(result)
+        app.delete_messages(chat_id, progress_msg.id)
         return result, result_url  # Return both result path and URL
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
         raise
     finally:
         api_queue.put(api)
+        thread.join()
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
@@ -236,6 +275,59 @@ def verify_join(client, callback):
             translations[lang]["not_joined_alert"],
             show_alert=True
         )
+
+@app.on_callback_query(filters.regex("^change_lang$"))
+def change_language_callback(client, callback):
+    chat_id = callback.message.chat.id
+    user_id = callback.from_user.id
+
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
+    # Create language selection keyboard
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("English", callback_data="lang_en"),
+            InlineKeyboardButton("Persian", callback_data="lang_fa")
+        ]
+    ])
+
+    app.send_message(chat_id, translations[user_data.get(chat_id, {}).get('lang', 'en')]["select_lang"], reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex("^help$"))
+def help_callback(client, callback):
+    chat_id = callback.message.chat.id
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
+    # Help message with Back button
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
+    ])
+    app.send_message(chat_id, translations[lang]["help_message"], reply_markup=keyboard)
+
+@app.on_callback_query(filters.regex("^back_to_welcome$"))
+def back_to_welcome_callback(client, callback):
+    chat_id = callback.message.chat.id
+    user_id = callback.from_user.id
+    lang = user_data.get(chat_id, {}).get('lang', 'en')
+
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
+    # Send welcome message again
+    send_welcome_message(chat_id, user_id, lang)
+
+@app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
+def toggle_mandatory(client, message):
+    cmd = message.command[0]
+    status = cmd == "on"
+    update_mandatory_status(status)
+    app.send_message(message.chat.id, 
+        f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
+    )
 
 @app.on_message(filters.photo | filters.text)
 def main_handler(client, message):
@@ -309,3 +401,5 @@ def main_handler(client, message):
 if __name__ == "__main__":
     print("🤖 FaceSwap Bot Activated!")
     app.run()
+
+send me full code with working 
