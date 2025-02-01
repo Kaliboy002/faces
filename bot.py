@@ -22,7 +22,7 @@ app = Client(
 )
 
 # Initialize Gradio client for Motion Blur API
-GRADIO_CLIENT = GradioClient("https://gyufyjk-motion-blur.hf.space/--replicas/696du/")
+GRADIO_CLIENT = GradioClient("Gyufyjk/motion-blur")
 
 # Catbox API URL
 CATBOX_URL = "https://catbox.moe/user/api.php"
