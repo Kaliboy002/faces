@@ -1,9 +1,7 @@
 import os
 import time
 import requests
-import threading
 from queue import Queue
-from concurrent.futures import ThreadPoolExecutor
 from gradio_client import Client, file
 from pyrogram import Client as PyroClient, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -49,9 +47,6 @@ api_pool = [Client(api) for api in api_clients for _ in range(5)]  # 5 instances
 api_queue = Queue()
 for api in api_pool:
     api_queue.put(api)
-
-# Thread Pool for Parallel Processing
-executor = ThreadPoolExecutor(max_workers=20)
 
 # User Data and State Management
 user_data = {}
@@ -155,17 +150,6 @@ def upload_to_imgbb(file_path):
     except requests.exceptions.RequestException as e:
         raise Exception(f"Upload failed: {e}")
 
-def show_mandatory_message(chat_id, lang="en"):
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(translations[lang]["join_channel"], url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
-        [InlineKeyboardButton(translations[lang]["verify"], callback_data="check_join")]
-    ])
-    sent = app.send_message(chat_id, 
-        translations[lang]["mandatory_join"],
-        reply_markup=keyboard
-    )
-    user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
-
 def process_face_swap(chat_id, source_path, target_path):
     try:
         api = api_queue.get()
@@ -252,59 +236,6 @@ def verify_join(client, callback):
             translations[lang]["not_joined_alert"],
             show_alert=True
         )
-
-@app.on_callback_query(filters.regex("^change_lang$"))
-def change_language_callback(client, callback):
-    chat_id = callback.message.chat.id
-    user_id = callback.from_user.id
-
-    # Delete the current message
-    app.delete_messages(chat_id, callback.message.id)
-
-    # Create language selection keyboard
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("English", callback_data="lang_en"),
-            InlineKeyboardButton("Persian", callback_data="lang_fa")
-        ]
-    ])
-
-    app.send_message(chat_id, translations[user_data.get(chat_id, {}).get('lang', 'en')]["select_lang"], reply_markup=keyboard)
-
-@app.on_callback_query(filters.regex("^help$"))
-def help_callback(client, callback):
-    chat_id = callback.message.chat.id
-    lang = user_data.get(chat_id, {}).get('lang', 'en')
-
-    # Delete the current message
-    app.delete_messages(chat_id, callback.message.id)
-
-    # Help message with Back button
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
-    ])
-    app.send_message(chat_id, translations[lang]["help_message"], reply_markup=keyboard)
-
-@app.on_callback_query(filters.regex("^back_to_welcome$"))
-def back_to_welcome_callback(client, callback):
-    chat_id = callback.message.chat.id
-    user_id = callback.from_user.id
-    lang = user_data.get(chat_id, {}).get('lang', 'en')
-
-    # Delete the current message
-    app.delete_messages(chat_id, callback.message.id)
-
-    # Send welcome message again
-    send_welcome_message(chat_id, user_id, lang)
-
-@app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
-def toggle_mandatory(client, message):
-    cmd = message.command[0]
-    status = cmd == "on"
-    update_mandatory_status(status)
-    app.send_message(message.chat.id, 
-        f"✅ Mandatory join {'enabled' if status else 'disabled'} successfully!"
-    )
 
 @app.on_message(filters.photo | filters.text)
 def main_handler(client, message):
