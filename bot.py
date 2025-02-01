@@ -166,26 +166,7 @@ def show_mandatory_message(chat_id, lang="en"):
     )
     user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
-def progress_updater(chat_id, message_id, start_time):
-    progress_steps = [1, 15, 24, 38, 49, 55, 67, 75, 86, 95, 100]
-    for progress in progress_steps:
-        try:
-            app.edit_message_text(
-                chat_id,
-                message_id,
-                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%"
-            )
-            time.sleep(3)  # Adjust sleep time as needed
-        except:
-            break
-
 def process_face_swap(chat_id, source_path, target_path):
-    start_time = time.time()
-    lang = user_data[chat_id].get('lang', 'en')
-    progress_msg = app.send_message(chat_id, translations[lang]['processing'])
-    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
-    thread.start()
-
     try:
         api = api_queue.get()
         result = api.predict(
@@ -195,14 +176,12 @@ def process_face_swap(chat_id, source_path, target_path):
             api_name="/predict"
         )
         result_url = upload_to_imgbb(result)
-        app.delete_messages(chat_id, progress_msg.id)
         return result, result_url  # Return both result path and URL
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
         raise
     finally:
         api_queue.put(api)
-        thread.join()
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
