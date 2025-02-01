@@ -41,7 +41,7 @@ async def upload_to_catbox(file_path):
 async def process_image(image_url, distance_blur=200, amount_blur=1):
     """Process the image by applying motion blur and return the result filepath."""
     try:
-        result = gradio_client.predict(
+        result = await gradio_client.async_predict(  # Use async_predict to handle async generators
             img=file(image_url),  # URL of the image to process
             distance_blur=distance_blur,
             amount_blur=amount_blur,
