@@ -1,79 +1,94 @@
 import os
-import requests
+import logging
 from pyrogram import Client, filters
+from pyrogram.types import Message
+from PIL import Image
+from rembg import remove
+import cv2
+import numpy as np
+from moviepy.editor import VideoFileClip
+from io import BytesIO
+import requests
+from dotenv import load_dotenv
 
-# Replace with your credentials
-API_ID = "15787995"
-API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
-BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
+# Load environment variables
+load_dotenv()
 
-# Catbox Upload Function
-def upload_to_catbox(file_path):
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Telegram API credentials
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Initialize the Pyrogram client
+app = Client("motion_blur_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+# Helper functions
+def cv_to_pil(img):
+    return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA))
+
+def pil_to_cv(img):
+    return cv2.cvtColor(np.array(img), cv2.COLOR_RGBA2BGRA)
+
+def motion_blur(img, distance, amount):
+    img = img.convert('RGBA')
+    cv_img = pil_to_cv(img)
+    kernel_motion_blur = np.zeros((distance, distance))
+    kernel_motion_blur[int((distance-1)/2), :] = np.ones(distance)
+    kernel_motion_blur = kernel_motion_blur / distance
+    output = cv2.filter2D(cv_img, -1, kernel_motion_blur)
+    blur_img = cv_to_pil(output).convert('RGBA')
+    final_img = Image.blend(img, blur_img, amount)
+    return final_img
+
+def background_motion_blur(background, distance_blur, amount_blur, amount_subject):
+    subject = remove(background)
+    background_blur = motion_blur(background, distance_blur, amount_blur)
+    subject_on_blur_background = background_blur.copy()
+    subject_on_blur_background.paste(background, (0,0), subject)
+    result = Image.blend(background_blur, subject_on_blur_background, amount_subject)
+    return result
+
+def process_image(image_path):
+    img = Image.open(image_path)
+    blurred_img = background_motion_blur(img, distance_blur=100, amount_blur=0.75, amount_subject=1.0)
+    blurred_img.save("blurred_image.png")
+    return "blurred_image.png"
+
+def process_video(video_path):
+    clip = VideoFileClip(video_path)
+    blurred_clip = clip.fl_image(lambda frame: np.array(background_motion_blur(Image.fromarray(frame), 100, 0.75, 1.0)))
+    blurred_clip.write_videofile("blurred_video.mp4", codec="libx264")
+    return "blurred_video.mp4"
+
+# Telegram bot handlers
+@app.on_message(filters.photo | filters.video)
+async def handle_media(client: Client, message: Message):
     try:
-        with open(file_path, "rb") as file:
-            response = requests.post("https://catbox.moe/user/api.php", 
-                                     data={"reqtype": "fileupload"}, 
-                                     files={"fileToUpload": file})
-        
-        if response.status_code == 200 and response.text.startswith("https"):
-            return response.text.strip()  # Return direct image link
-        else:
-            print(f"Error uploading to Catbox: {response.text}")
-            return None  # Return None if upload failed
-    except requests.RequestException as e:
-        print(f"Request failed during Catbox upload: {e}")
-        return None
+        await message.reply("Processing your media...")
 
-bot = Client("remove_bg_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+        # Download the media
+        media_path = await message.download()
 
-@bot.on_message(filters.command("start"))
-def start(client, message):
-    message.reply_text("📸 Send me an image, and I'll remove its background!")
+        # Process the media
+        if message.photo:
+            output_path = process_image(media_path)
+            await message.reply_photo(output_path)
+        elif message.video:
+            output_path = process_video(media_path)
+            await message.reply_video(output_path)
 
-@bot.on_message(filters.photo | filters.document)
-def remove_background(client, message):
-    msg = message.reply_text("🔄 Removing background, please wait...")
-
-    try:
-        # Download user's image
-        file_path = client.download_media(message)
-        
-        if not file_path:
-            message.reply_text("❌ Failed to download image. Please try again!")
-            return
-        
-        # Upload original image to Catbox
-        catbox_url = upload_to_catbox(file_path)
-        if not catbox_url:
-            message.reply_text("❌ Failed to upload image to Catbox. Try again!")
-            return
-
-        # Send request to the new API to process the image
-        api_url = f"https://api.nyxs.pw/tools/hd?url={catbox_url}"
-        response = requests.get(api_url)
-
-        if response.status_code == 200:
-            data = response.json()
-
-            if data.get("status") == True:
-                # Extract the result URL for the processed image
-                processed_image_url = data["result"]
-
-                # Send the processed image URL directly to the user
-                message.reply_photo(processed_image_url, caption="✅ Here is your background-removed image!")
-
-                # Cleanup
-                os.remove(file_path)  # Clean up original file
-            else:
-                message.reply_text("❌ Error processing the image.")
-        else:
-            message.reply_text("❌ API request failed.")
+        # Clean up
+        os.remove(media_path)
+        os.remove(output_path)
 
     except Exception as e:
-        print(f"Error during processing: {e}")
-        message.reply_text("❌ An unexpected error occurred. Please try again.")
+        logger.error(f"Error processing media: {e}")
+        await message.reply("An error occurred while processing your media.")
 
-    finally:
-        msg.delete()
-
-bot.run()
+# Start the bot
+if __name__ == "__main__":
+    app.run()
