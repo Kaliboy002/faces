@@ -1,8 +1,13 @@
-
+opencv-python
+pillow
+numpy
+rembg
+moviepy
+pyrogram
+requests
+python-dotenv
 motor
 aiohttp
 pymongo
 tgcrypto
-pyrogram
-requests
 gradio_client
