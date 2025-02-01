@@ -5,7 +5,7 @@ from pyrogram import Client, filters
 # Replace with your credentials
 API_ID = "15787995"
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
-BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ"
+BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
 
 # Catbox Upload Function
 def upload_to_catbox(file_path):
