@@ -1,4 +1,3 @@
-
 import os
 import time
 import requests
@@ -176,7 +175,7 @@ def progress_updater(chat_id, message_id, start_time):
                 message_id,
                 f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%"
             )
-            time.sleep(3)  # Adjust sleep time as needed
+            time.sleep(1)  # Reduced sleep time for smoother progress
         except:
             break
 
