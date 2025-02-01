@@ -2,7 +2,6 @@ opencv-python
 pyrogram
 requests
 python-dotenv
-onnxruntime
 motor
 aiohttp
 pymongo
