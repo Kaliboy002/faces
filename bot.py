@@ -34,8 +34,22 @@ async def process_image(image_url, distance_blur=200, amount_blur=1):
             amount_blur=amount_blur,
             api_name="/blur"
         )
-        # Return the result's file path
-        return result["filepath"]
+        
+        # Debugging: Print the result type and content
+        print(f"Result type: {type(result)}")
+        print(f"Result content: {result}")
+
+        # If the result is a list, we need to access the first item or use the appropriate key
+        if isinstance(result, list):
+            result = result[0]  # Assuming the result is a list, access the first item
+        
+        # Check if the result is a dictionary
+        if isinstance(result, dict) and "filepath" in result:
+            return result["filepath"]
+        else:
+            print("Unexpected result format: ", result)
+            return None
+
     except Exception as e:
         print(f"Error processing image: {e}")
         return None
