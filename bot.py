@@ -62,7 +62,6 @@ translations = {
         "verify_join": "✅ Verification successful! Send source image now.",
         "join_channel": "Join Channel",
         "verify": "Verify Join",
-        "source_image": "📸 Send the source image (face to swap)",
         "target_image": "📸 Send the target image (face to replace)",
         "processing": "⏳ Processing...",
         "processing_complete": "✨ Face swap completed!\n🔗 URL: ",
@@ -83,7 +82,6 @@ translations = {
         "verify_join": "✅ تایید با موفقیت انجام شد! عکس منبع خود را ارسال کنید.",
         "join_channel": "پیوستن به کانال",
         "verify": "تایید",
-        "source_image": "📸 عکس منبع خود را ارسال کنید",
         "target_image": "📸 عکس هدف خود را ارسال کنید",
         "processing": "⏳ در حال پروسیس...",
         "processing_complete": "✨ جابه جای چهره به اتمام رسید!\n🔗 لینک: ",
@@ -383,10 +381,6 @@ def main_handler(client, message):
             os.remove(target_path)
             os.remove(result_path)  # Cleanup the result file
             del user_data[chat_id]
-
-        else:
-            user_data[chat_id] = {"step": "awaiting_source", "lang": lang}
-            app.send_message(chat_id, translations[lang]["source_image"])
 
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"❌ Critical Error: {str(e)}")
