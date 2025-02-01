@@ -1,71 +1,72 @@
 import os
 import requests
 from pyrogram import Client, filters
-from pyrogram.types import Message
 
-# Replace these with your own values
-API_ID = "15787995"  # Get from https://my.telegram.org
-API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Get from https://my.telegram.org
-BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"  # Get from BotFather
+# Replace these with your credentials
+API_ID = "15787995"
+API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
+BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
 
-# Initialize the Pyrogram Client
-app = Client("image_enhancer_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# Catbox Upload Function
+def upload_to_catbox(file_path):
+    with open(file_path, "rb") as file:
+        response = requests.post("https://catbox.moe/user/api.php", 
+                                 data={"reqtype": "fileupload"}, 
+                                 files={"fileToUpload": file})
+    if response.status_code == 200 and response.text.startswith("https"):
+        return response.text.strip()  # Return the direct image link
+    return None  # Return None if upload failed
 
-# API endpoint
-ENHANCE_API = "https://ar-api-08uk.onrender.com/remini"
+bot = Client("image_enhancer_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Start command
-@app.on_message(filters.command("start") & filters.private)
-def start(client, message: Message):
-    message.reply_text("Hello! Send me an image, and I will enhance it for you.")
+@bot.on_message(filters.command("start"))
+def start(client, message):
+    message.reply_text("📸 Send me an image, and I'll enhance its quality!")
 
-# Handle image messages
-@app.on_message(filters.photo & filters.private)
-def enhance_image(client, message: Message):
-    # Notify the user that the image is being processed
-    message.reply_text("Processing your image... Please wait.")
+@bot.on_message(filters.photo | filters.document)
+def enhance_image(client, message):
+    msg = message.reply_text("🔄 Enhancing your image, please wait...")
 
-    try:
-        # Download the image sent by the user
-        file_path = message.download()
+    # Download the user's image
+    file_path = client.download_media(message)
 
-        # Upload the image to a temporary file hosting service (tmpfiles.org)
-        with open(file_path, "rb") as file:
-            response = requests.post("https://tmpfiles.org/api/v1/upload", files={"file": file})
-        
-        if response.status_code != 200:
-            raise Exception("Failed to upload image to temporary hosting.")
+    # Upload the original image to Catbox
+    catbox_url = upload_to_catbox(file_path)
+    if not catbox_url:
+        message.reply_text("❌ Failed to upload image to Catbox. Try again!")
+        return
 
-        # Get the temporary file URL from the response
-        temp_file_url = response.json()["data"]["url"]
+    # Send request to enhancement API
+    api_url = f"https://ar-api-08uk.onrender.com/remini?url={catbox_url}"
+    response = requests.get(api_url)
 
-        # Enhance the image using the API
-        api_url = f"{ENHANCE_API}?url={temp_file_url}"
-        enhance_response = requests.get(api_url)
+    if response.status_code == 200:
+        data = response.json()
+        if data.get("status") == 200:
+            enhanced_url = data.get("result")
 
-        if enhance_response.status_code != 200:
-            raise Exception("Failed to enhance image.")
+            # 🔽 Download the enhanced image
+            enhanced_image_path = "enhanced_image.jpg"
+            img_data = requests.get(enhanced_url).content
+            with open(enhanced_image_path, "wb") as img_file:
+                img_file.write(img_data)
 
-        # Parse the enhanced image URL from the API response
-        enhanced_image_url = enhance_response.json().get("result")
-        if not enhanced_image_url:
-            raise Exception("No enhanced image URL found in the API response.")
+            # 📤 Upload the enhanced image to Catbox
+            final_url = upload_to_catbox(enhanced_image_path)
+            if final_url:
+                message.reply_photo(final_url, caption=f"✅ Here is your enhanced image!\n🔗 [Permanent Link]({final_url})", disable_web_page_preview=True)
+            else:
+                message.reply_text("✅ Here is your enhanced image (temporary):")
+                message.reply_photo(enhanced_image_path)
 
-        # Check if the enhanced image URL is valid
-        if not enhanced_image_url.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
-            raise Exception("Enhanced image URL is not a valid image file.")
+            # Cleanup
+            os.remove(enhanced_image_path)
+        else:
+            message.reply_text("❌ Error enhancing the image.")
+    else:
+        message.reply_text("❌ API request failed.")
 
-        # Send the enhanced image back to the user
-        message.reply_photo(enhanced_image_url, caption="Here's your enhanced image!")
+    msg.delete()
+    os.remove(file_path)  # Cleanup original file
 
-    except Exception as e:
-        message.reply_text(f"An error occurred: {e}")
-
-    finally:
-        # Clean up: Delete the downloaded file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-# Run the bot
-print("Bot is running...")
-app.run()
+bot.run()
