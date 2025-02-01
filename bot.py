@@ -137,19 +137,23 @@ def download_file(client, file_id, save_as):
     except Exception as e:
         raise Exception(f"Download failed: {e}")
 
-def upload_to_catbox(file_path):
-    try:
-        with open(file_path, "rb") as f:
-            response = requests.post(
-                "https://catbox.moe/user/api.php",
-                files={"fileToUpload": f},
-                data={"reqtype": "fileupload"},
-                timeout=10  # Set timeout to 10 seconds
-            )
-            response.raise_for_status()
-        return response.text.strip()
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Upload failed: {e}")
+def upload_to_catbox(file_path, retries=3):
+    for attempt in range(retries):
+        try:
+            with open(file_path, "rb") as f:
+                response = requests.post(
+                    "https://catbox.moe/user/api.php",
+                    files={"fileToUpload": f},
+                    data={"reqtype": "fileupload"},
+                    timeout=10  # Set timeout to 10 seconds
+                )
+                response.raise_for_status()
+            return response.text.strip()
+        except requests.exceptions.RequestException as e:
+            if attempt < retries - 1:
+                time.sleep(2)  # Wait before retrying
+                continue
+            raise Exception(f"Upload failed after {retries} attempts: {e}")
 
 def show_mandatory_message(chat_id, lang="en"):
     keyboard = InlineKeyboardMarkup([
