@@ -92,7 +92,7 @@ translations = {
         "error": "⚠️ خطایی پیش آمد. لطفا دوباره تلاش کنید.",
         "not_joined_alert": "😐 شما عضو نشده‌اید. باید عضو شوید و سپس روی تایید کلیک کنید.",
         "welcome_caption": "سلام {username}، به بات جابه‌جایی چهره خوش آمدید! لطفا عکس اصلی خود را ارسال کنید.",
-        "help_message": "سلام، حال شما چطوره؟ شما میتوانید از این بات به صورت رایگان استفاده کنید.",
+        "help_message": "سلام، حال شما چطوره؟ شما می‌توانید از این بات به صورت رایگان استفاده کنید.",
         "back_button": "بازگشت",
         "change_lang": "تغییر زبان",
         "help_button": "راهنما"
@@ -143,11 +143,12 @@ def upload_to_catbox(file_path):
             response = requests.post(
                 "https://catbox.moe/user/api.php",
                 files={"fileToUpload": f},
-                data={"reqtype": "fileupload"}
+                data={"reqtype": "fileupload"},
+                timeout=10  # Set timeout to 10 seconds
             )
             response.raise_for_status()
         return response.text.strip()
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         raise Exception(f"Upload failed: {e}")
 
 def show_mandatory_message(chat_id, lang="en"):
@@ -161,9 +162,25 @@ def show_mandatory_message(chat_id, lang="en"):
     )
     user_data[chat_id] = {"mandatory_msg": sent.id, "lang": lang}
 
+def progress_updater(chat_id, message_id, start_time):
+    progress_steps = [1, 15, 24, 38, 49, 55, 67, 75, 86, 95, 100]
+    for progress in progress_steps:
+        try:
+            app.edit_message_text(
+                chat_id,
+                message_id,
+                f"{translations[user_data[chat_id]['lang']]['processing']}... {progress}%"
+            )
+            time.sleep(3)  # Adjust sleep time as needed
+        except:
+            break
+
 def process_face_swap(chat_id, source_path, target_path):
+    start_time = time.time()
     lang = user_data[chat_id].get('lang', 'en')
     progress_msg = app.send_message(chat_id, translations[lang]['processing'])
+    thread = threading.Thread(target=progress_updater, args=(chat_id, progress_msg.id, start_time))
+    thread.start()
 
     try:
         api = api_queue.get()
@@ -175,24 +192,28 @@ def process_face_swap(chat_id, source_path, target_path):
         )
         result_url = upload_to_catbox(result)
         app.delete_messages(chat_id, progress_msg.id)
-        return result, result_url
+        return result, result_url  # Return both result path and URL
     except Exception as e:
         app.send_message(ADMIN_CHAT_ID, f"⚠️ API Error: {str(e)}")
         raise
     finally:
         api_queue.put(api)
+        thread.join()
 
 @app.on_message(filters.command("start"))
 def start_handler(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
+    # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("English", callback_data="lang_en"),
             InlineKeyboardButton("Persian", callback_data="lang_fa")
         ]
     ])
+
+    # Send welcome message with language selection
     sent = app.send_message(chat_id, translations["en"]["welcome"], reply_markup=keyboard)
     user_data[chat_id] = {"start_msg": sent.id}
 
@@ -202,18 +223,24 @@ def language_callback(client, callback):
     user_id = callback.from_user.id
     lang = callback.data.split('_')[1]
 
-    app.delete_messages(chat_id, user_data[chat_id]["start_msg"])
+    # Delete the language selection message
+    app.delete_messages(chat_id, callback.message.id)
+
+    # Store selected language in user_data
     user_data[chat_id] = {'lang': lang}
 
+    # Proceed with mandatory join check
     if not check_membership(user_id):
         show_mandatory_message(chat_id, lang)
     else:
         send_welcome_message(chat_id, user_id, lang)
 
 def send_welcome_message(chat_id, user_id, lang):
+    # Welcome photo URL
     photo_url = "https://files.catbox.moe/tv24yp.jpg"
     username = app.get_users(user_id).first_name
 
+    # Welcome message with photo and buttons
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(translations[lang]["change_lang"], callback_data="change_lang"),
@@ -248,12 +275,17 @@ def change_language_callback(client, callback):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
 
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
+    # Create language selection keyboard
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("English", callback_data="lang_en"),
             InlineKeyboardButton("Persian", callback_data="lang_fa")
         ]
     ])
+
     app.send_message(chat_id, translations[user_data.get(chat_id, {}).get('lang', 'en')]["select_lang"], reply_markup=keyboard)
 
 @app.on_callback_query(filters.regex("^help$"))
@@ -261,6 +293,10 @@ def help_callback(client, callback):
     chat_id = callback.message.chat.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
+    # Help message with Back button
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(translations[lang]["back_button"], callback_data="back_to_welcome")]
     ])
@@ -272,6 +308,10 @@ def back_to_welcome_callback(client, callback):
     user_id = callback.from_user.id
     lang = user_data.get(chat_id, {}).get('lang', 'en')
 
+    # Delete the current message
+    app.delete_messages(chat_id, callback.message.id)
+
+    # Send welcome message again
     send_welcome_message(chat_id, user_id, lang)
 
 @app.on_message(filters.command(["on", "off"]) & filters.user(ADMIN_CHAT_ID))
@@ -319,22 +359,25 @@ def main_handler(client, message):
             file_id = message.photo.file_id
             target_path = download_file(client, file_id, f"{chat_id}_target.jpg")
 
+            # Process images and get both result path and URL
             result_path, result_url = process_face_swap(
                 chat_id,
                 user_data[chat_id]["source"],
                 target_path
             )
 
+            # Send the actual swapped image
             app.send_photo(
                 chat_id, 
-                photo=result_path,
+                photo=result_path,  # Send the swapped image file
                 caption=f"{translations[lang]['processing_complete']}{result_url}"
             )
 
+            # Update cooldown and cleanup
             update_cooldown(user_id)
             os.remove(user_data[chat_id]["source"])
             os.remove(target_path)
-            os.remove(result_path)
+            os.remove(result_path)  # Cleanup the result file
             del user_data[chat_id]
 
         else:
