@@ -6,6 +6,7 @@ moviepy
 pyrogram
 requests
 python-dotenv
+onnxruntime
 motor
 aiohttp
 pymongo
