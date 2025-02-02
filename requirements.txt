@@ -1,3 +1,5 @@
+
+imageio[ffmpeg]
 requests
 python-ffmpeg
 ffmpeg
