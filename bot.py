@@ -1,79 +1,147 @@
 import os
-import requests
+import aiohttp
+import asyncio
+import logging
 from pyrogram import Client, filters
+from pyrogram.types import Message
+from gradio_client import Client as GradioClient, handle_file
 
-# Replace with your credentials
-API_ID = "15787995"
-API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
-BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
+# Gradio Client setup for Hepzeka API
+HEPZEKA_API = GradioClient("mukaist/finegrain-image-enhancer")
 
-# Catbox Upload Function
-def upload_to_catbox(file_path):
+# ImgBB API URL and API Key for uploading images
+IMGBB_API_URL = "https://api.imgbb.com/1/upload"
+IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"  # Your ImgBB API key
+
+# Telegram Bot Token
+BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Replace with your Telegram bot token
+
+# Your API ID and API Hash from Telegram
+API_ID = "15787995"  # Replace with your API ID
+API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
+
+# Create a Pyrogram client (Bot)
+bot = Client("image_enhancer_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Async function to upload the image to ImgBB and return the URL
+async def upload_to_imgbb(file_path: str) -> str:
+    """Upload the file to ImgBB and return the URL."""
     try:
-        with open(file_path, "rb") as file:
-            response = requests.post("https://catbox.moe/user/api.php", 
-                                     data={"reqtype": "fileupload"}, 
-                                     files={"fileToUpload": file})
-        
-        if response.status_code == 200 and response.text.startswith("https"):
-            return response.text.strip()  # Return direct image link
-        else:
-            print(f"Error uploading to Catbox: {response.text}")
-            return None  # Return None if upload failed
-    except requests.RequestException as e:
-        print(f"Request failed during Catbox upload: {e}")
+        async with aiohttp.ClientSession() as session:
+            async with aiohttp.FormData() as form:
+                form.add_field("key", IMGBB_API_KEY)
+                with open(file_path, "rb") as file:
+                    form.add_field("image", file)
+
+                async with session.post(IMGBB_API_URL, data=form) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    if data.get("status") == 200:
+                        return data["data"]["url"]
+                    else:
+                        logger.error(f"ImgBB API error: {data}")
+                        return None
+    except Exception as e:
+        logger.error(f"Failed to upload file to ImgBB: {e}")
         return None
 
-bot = Client("remove_bg_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
-@bot.on_message(filters.command("start"))
-def start(client, message):
-    message.reply_text("📸 Send me an image, and I'll remove its background!")
-
-@bot.on_message(filters.photo | filters.document)
-def remove_background(client, message):
-    msg = message.reply_text("🔄 Removing background, please wait...")
-
+# Async function to process the image with Gradio API (Hepzeka Image Enhancer)
+async def enhance_image(image_path: str, prompt: str = "", negative_prompt: str = "", upscale_factor: float = 2) -> str:
+    """Enhance the image using the Hepzeka API and return the result filepath."""
     try:
-        # Download user's image
-        file_path = client.download_media(message)
-        
-        if not file_path:
-            message.reply_text("❌ Failed to download image. Please try again!")
-            return
-        
-        # Upload original image to Catbox
-        catbox_url = upload_to_catbox(file_path)
-        if not catbox_url:
-            message.reply_text("❌ Failed to upload image to Catbox. Try again!")
-            return
+        result = HEPZEKA_API.predict(
+            input_image=handle_file(image_path),  # Path to the image file
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            upscale_factor=upscale_factor,
+            controlnet_scale=0.6,
+            controlnet_decay=1,
+            condition_scale=6,
+            tile_width=112,
+            tile_height=144,
+            denoise_strength=0.35,
+            num_inference_steps=18,
+            solver="DDIM",
+            api_name="/process"
+        )
 
-        # Send request to the new API to process the image
-        api_url = f"https://api.nyxs.pw/tools/hd?url={catbox_url}"
-        response = requests.get(api_url)
-
-        if response.status_code == 200:
-            data = response.json()
-
-            if data.get("status") == True:
-                # Extract the result URL for the processed image
-                processed_image_url = data["result"]
-
-                # Send the processed image URL directly to the user
-                message.reply_photo(processed_image_url, caption="✅ Here is your background-removed image!")
-
-                # Cleanup
-                os.remove(file_path)  # Clean up original file
-            else:
-                message.reply_text("❌ Error processing the image.")
+        # The result should return the processed image file path
+        if isinstance(result, tuple) and result[1]:
+            return result[1]
         else:
-            message.reply_text("❌ API request failed.")
-
+            logger.error(f"Unexpected result format: {result}")
+            return None
     except Exception as e:
-        print(f"Error during processing: {e}")
-        message.reply_text("❌ An unexpected error occurred. Please try again.")
+        logger.error(f"Error enhancing image: {e}")
+        return None
 
-    finally:
-        msg.delete()
+# Handle the /start command
+@bot.on_message(filters.command("start"))
+async def start(client: Client, message: Message):
+    """Handles the /start command."""
+    await message.reply(
+        "Welcome! Send me a photo to enhance.\n\n"
+        "You can customize the enhancement by sending:\n"
+        "/enhance <prompt> <negative_prompt> <upscale_factor>\n\n"
+        "Example: /enhance \"Brighten the image\" \"Reduce noise\" 2"
+    )
 
-bot.run()
+# Handle photo messages
+@bot.on_message(filters.photo)
+async def handle_photo(client: Client, message: Message):
+    """Handles photo messages and processes them."""
+    try:
+        # Download the photo sent by the user
+        file_path = await message.download()
+
+        # Default enhancement parameters
+        prompt = ""
+        negative_prompt = ""
+        upscale_factor = 2
+
+        # Check if the user provided custom parameters in the caption
+        if message.caption and message.caption.startswith("/enhance"):
+            try:
+                _, prompt, negative_prompt, upscale_factor = message.caption.split(maxsplit=3)
+                upscale_factor = float(upscale_factor)
+            except Exception as e:
+                logger.error(f"Failed to parse enhancement parameters: {e}")
+                await message.reply("Invalid enhancement parameters. Using default values.")
+
+        # Enhance the image via the Hepzeka API
+        logger.info(f"Enhancing image: {file_path}")
+        enhanced_image_path = await enhance_image(file_path, prompt, negative_prompt, upscale_factor)
+
+        if enhanced_image_path:
+            # Upload the enhanced image to ImgBB
+            imgbb_url = await upload_to_imgbb(enhanced_image_path)
+            if imgbb_url:
+                # Send the ImgBB URL back to the user
+                await message.reply_photo(
+                    imgbb_url,
+                    caption=f"✅ Here's your enhanced image!\n\n"
+                            f"Prompt: {prompt}\n"
+                            f"Negative Prompt: {negative_prompt}\n"
+                            f"Upscale Factor: {upscale_factor}"
+                )
+            else:
+                await message.reply("Failed to upload the image to ImgBB.")
+        else:
+            await message.reply("Failed to enhance the image.")
+
+        # Clean up downloaded and processed files
+        os.remove(file_path)
+        if enhanced_image_path:
+            os.remove(enhanced_image_path)
+    except Exception as e:
+        await message.reply(f"An error occurred: {str(e)}")
+        logger.error(f"Error: {str(e)}")
+
+# Run the bot
+if __name__ == "__main__":
+    logger.info("Starting Image Enhancer Bot...")
+    bot.run()
