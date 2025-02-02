@@ -1,8 +1,14 @@
 # Use the official Python base image
 FROM python:3.12-slim
 
-# Install FFmpeg
-RUN apt-get update && apt-get install -y ffmpeg
+# Install system dependencies to build Python packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    python3-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app
