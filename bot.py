@@ -5,9 +5,9 @@ from pyrogram import Client as PyroClient, filters
 
 # Telegram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
-API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
-BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"
-"  # Replace with your Telegram Bot Token
+API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  
+# Replace with your API Hash
+BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c" # Replace with your Telegram Bot Token
 ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
 
 # Pyrogram Bot Initialization
