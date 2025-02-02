@@ -7,7 +7,7 @@ from pyrogram.types import Message
 API_ID = 15787995  # Get from https://my.telegram.org
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Get from https://my.telegram.org
 BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"
-IMGBB_API_KEY = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Get from https://api.imgbb.com/
+IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"  # Get from https://api.imgbb.com/
 
 # Initialize Pyrogram client
 app = Client("bg_remover_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
