@@ -1,11 +1,10 @@
-
+pyrogram==2.0.106
 imageio[ffmpeg]
+tgcrypto==1.2.0  # Specify a stable version
 requests
 python-ffmpeg
 ffmpeg
-pyrogram
 gradio_client
-tgcrypto
 aiohttp
 aiofiles
 pymongo
