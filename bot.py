@@ -5,7 +5,14 @@ import tempfile
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, file
-from concurrent.futures import ThreadPoolExecutor
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+
+# MongoDB connection
+MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["shah"]
+users_collection = db["users"]
 
 # Bot credentials
 API_ID = 15787995  # Replace with your API ID
@@ -37,9 +44,6 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 user_selections = {}
 user_data = {}
 
-# Thread pool for blocking tasks
-executor = ThreadPoolExecutor(max_workers=4)
-
 # Send selection buttons
 def get_main_buttons():
     return InlineKeyboardMarkup([
@@ -48,9 +52,36 @@ def get_main_buttons():
         [InlineKeyboardButton("👤 Face Swap", callback_data="face_swap")]
     ])
 
+# Initialize user data in MongoDB
+async def initialize_user(user_id, referrer_id=None):
+    user = users_collection.find_one({"user_id": user_id})
+    if not user:
+        users_collection.insert_one({
+            "user_id": user_id,
+            "face_swap_count": 2,  # Initial free tier
+            "referral_count": 0,
+            "referrer_id": referrer_id,
+            "referral_link": f"https://t.me/your_bot_username?start={user_id}"
+        })
+        if referrer_id:
+            # Add 1 face swap chance to the referrer
+            users_collection.update_one(
+                {"user_id": referrer_id},
+                {"$inc": {"face_swap_count": 1, "referral_count": 1}}
+            )
+            # Notify the referrer
+            await app.send_message(referrer_id, f"🎉 A new user joined using your referral link! You've received 1 additional face swap chance.")
+
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
-    user_selections[message.from_user.id] = None  # Reset selection
+    user_id = message.from_user.id
+    args = message.text.split()
+    referrer_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
+
+    # Initialize user in MongoDB
+    await initialize_user(user_id, referrer_id)
+
+    user_selections[user_id] = None  # Reset selection
     await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_callback_query()
@@ -97,6 +128,15 @@ async def photo_handler(client: Client, message: Message):
         return
 
     if user_choice == "face_swap":
+        # Check face swap count
+        user = users_collection.find_one({"user_id": user_id})
+        if user["face_swap_count"] <= 0:
+            await message.reply_text(
+                "❌ You've used all your free face swaps.\n"
+                f"🔗 Invite friends using your referral link to get more chances: {user['referral_link']}\n"
+                f"👥 Users invited: {user['referral_count']}"
+            )
+            return
         await handle_face_swap(client, message)
     else:
         api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
@@ -124,6 +164,11 @@ async def handle_face_swap(client: Client, message: Message):
             )
             if swapped_image_path:
                 await message.reply_photo(swapped_image_path, caption="✅ Face swap completed!")
+                # Deduct face swap count
+                users_collection.update_one(
+                    {"user_id": user_id},
+                    {"$inc": {"face_swap_count": -1}}
+                )
             else:
                 await message.reply_text("❌ Face swap failed. Please try again.")
         except Exception as e:
