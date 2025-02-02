@@ -1,3 +1,4 @@
+pillow
 tgcrypto # Specify a stable version
 requests
 python-ffmpeg
