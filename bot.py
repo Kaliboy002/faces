@@ -1,127 +1,133 @@
 import os
-import aiohttp
-import asyncio
-import logging
-from pyrogram import Client, filters
-from pyrogram.types import Message
-from gradio_client import Client as GradioClient
+import requests
+from gradio_client import Client, file
+from pyrogram import Client as PyroClient, filters
 
-# Gradio Client for Face Swap
-GRADIO_CLIENT = GradioClient("Kaliboy002/face-swapm")
-
-# ImgBB API URL and Key
-IMGBB_API_URL = "https://api.imgbb.com/1/upload"
-IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"  # Replace with your ImgBB API key
-
-# Telegram Bot Credentials
-BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Replace with your Telegram bot token
+# Telegram Bot Token and API Information
 API_ID = "15787995"  # Replace with your API ID
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
+BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"
+"  # Replace with your Telegram Bot Token
+ADMIN_CHAT_ID = 7046488481  # Replace with your Telegram user ID
 
-# Create a Pyrogram client
-bot = Client("face_swap_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+# Pyrogram Bot Initialization
+app = PyroClient("face_swap_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# List of Gradio Clients for Face Swap APIs
+api_clients = [
+    "Kaliboy0012/face-swapm",
+    "Jonny001/Image-Face-Swap",
+    "ovi054/face-swap-pro"
+]
+current_client_index = 0
+user_data = {}
 
-# Dictionary to track user progress
-user_sessions = {}
+def get_client():
+    global current_client_index
+    return Client(api_clients[current_client_index])
 
+def switch_client():
+    global current_client_index
+    current_client_index = (current_client_index + 1) % len(api_clients)
 
-async def upload_to_imgbb(file_path: str) -> str:
-    """Upload an image to ImgBB and return the URL."""
+def download_file(client, file_id, save_as):
     try:
-        async with aiohttp.ClientSession() as session:
-            with open(file_path, "rb") as file:
-                data = aiohttp.FormData()
-                data.add_field("key", IMGBB_API_KEY)
-                data.add_field("image", file)
-
-                async with session.post(IMGBB_API_URL, data=data) as response:
-                    result = await response.json()
-                    if result.get("status") == 200:
-                        return result["data"]["url"]
-                    else:
-                        logger.error(f"ImgBB API error: {result}")
-                        return None
+        file_path = client.download_media(file_id, file_name=save_as)
+        return file_path
     except Exception as e:
-        logger.error(f"Failed to upload file to ImgBB: {e}")
-        return None
+        raise Exception(f"Failed to download file: {e}")
 
-
-async def swap_faces(source: str, target: str) -> str:
-    """Perform face swap using Gradio API and return the processed image path."""
+def upload_to_catbox(file_path):
     try:
-        result = GRADIO_CLIENT.predict(
-            source_file=source,
-            target_file=target,
-            doFaceEnhancer=False,
-            api_name="/predict"
-        )
-        if isinstance(result, str):
-            return result
-        else:
-            logger.error(f"Unexpected API response: {result}")
-            return None
+        with open(file_path, "rb") as f:
+            response = requests.post(
+                "https://catbox.moe/user/api.php",
+                data={"reqtype": "fileupload"},
+                files={"fileToUpload": f}
+            )
+            response.raise_for_status()
+            return response.text.strip()
     except Exception as e:
-        logger.error(f"Error swapping faces: {e}")
-        return None
+        raise Exception(f"Failed to upload file to Catbox: {e}")
 
+@app.on_message(filters.command("start"))
+def start(client, message):
+    chat_id = message.chat.id
+    user_data[chat_id] = {"step": "awaiting_source"}
+    client.send_message(chat_id, "Welcome to the Face Swap Bot! Please send the source image (face to swap).")
 
-@bot.on_message(filters.command("start"))
-async def start(client: Client, message: Message):
-    """Handles the /start command."""
-    user_sessions[message.from_user.id] = {"step": "waiting_source"}
-    await message.reply("👋 Send me the **source image** (the face you want to swap).")
+@app.on_message(filters.photo)
+def handle_photo(client, message):
+    chat_id = message.chat.id
+    if chat_id not in user_data:
+        client.send_message(chat_id, "Please start the bot using /start.")
+        return
 
+    step = user_data[chat_id].get("step", None)
 
-@bot.on_message(filters.photo)
-async def handle_photo(client: Client, message: Message):
-    """Handles photo messages for face swap."""
-    user_id = message.from_user.id
+    try:
+        if step == "awaiting_source":
+            file_id = message.photo.file_id
+            source_image_path = f"{chat_id}_source.jpg"
+            user_data[chat_id]["source_image"] = download_file(client, file_id, source_image_path)
+            user_data[chat_id]["step"] = "awaiting_target"
+            client.send_message(chat_id, "Great! Now send the target image (destination face).")
 
-    if user_id not in user_sessions:
-        user_sessions[user_id] = {"step": "waiting_source"}
+        elif step == "awaiting_target":
+            if "source_image" not in user_data[chat_id]:
+                client.send_message(chat_id, "Source image is missing. Please restart with /start.")
+                reset_user_data(chat_id)
+                return
 
-    step = user_sessions[user_id]["step"]
+            file_id = message.photo.file_id
+            target_image_path = f"{chat_id}_target.jpg"
+            user_data[chat_id]["target_image"] = download_file(client, file_id, target_image_path)
+            client.send_message(chat_id, "Processing your request, please wait...")
 
-    file_path = await message.download()
+            # Perform Face Swap
+            while True:
+                try:
+                    client_api = get_client()
+                    source_file = user_data[chat_id]["source_image"]
+                    target_file = user_data[chat_id]["target_image"]
 
-    if step == "waiting_source":
-        user_sessions[user_id]["source"] = file_path
-        user_sessions[user_id]["step"] = "waiting_target"
-        await message.reply("✅ Source image received! Now send the **target image** (the face you want to replace).")
+                    result = client_api.predict(
+                        source_file=file(source_file),
+                        target_file=file(target_file),
+                        doFaceEnhancer=True,
+                        api_name="/predict"
+                    )
 
-    elif step == "waiting_target":
-        user_sessions[user_id]["target"] = file_path
-        await message.reply("⏳ Processing face swap... Please wait.")
+                    # Upload the swapped image to Catbox
+                    swapped_image_url = upload_to_catbox(result)
 
-        source_path = user_sessions[user_id]["source"]
-        target_path = user_sessions[user_id]["target"]
+                    # Send the swapped image back to the user
+                    client.send_photo(chat_id, photo=result, caption=f"Face-swapped image: {swapped_image_url}")
+                    break
 
-        # Perform face swap
-        swapped_image_path = await swap_faces(source_path, target_path)
+                except Exception as e:
+                    client.send_message(ADMIN_CHAT_ID, f"Error with API {api_clients[current_client_index]}: {e}")
+                    switch_client()  # Switch to the next API
 
-        if swapped_image_path:
-            # Upload result to ImgBB
-            imgbb_url = await upload_to_imgbb(swapped_image_path)
-            if imgbb_url:
-                await message.reply_photo(imgbb_url, caption="✅ Face Swap Completed!")
-            else:
-                await message.reply("❌ Failed to upload swapped image.")
+            cleanup_files(chat_id)
+            reset_user_data(chat_id)
+
         else:
-            await message.reply("❌ Face swap failed. Please try again.")
+            client.send_message(chat_id, "Invalid step. Please restart with /start.")
+            reset_user_data(chat_id)
 
-        # Cleanup
-        os.remove(source_path)
-        os.remove(target_path)
-        user_sessions.pop(user_id, None)  # Reset user session
+    except Exception as e:
+        client.send_message(ADMIN_CHAT_ID, f"Unexpected error: {e}")
+        reset_user_data(chat_id)
 
-    else:
-        await message.reply("Send the **source image** first.")
+def reset_user_data(chat_id):
+    if chat_id in user_data:
+        user_data.pop(chat_id, None)
 
+def cleanup_files(chat_id):
+    if chat_id in user_data:
+        for key in ["source_image", "target_image"]:
+            if key in user_data[chat_id] and os.path.exists(user_data[chat_id][key]):
+                os.remove(user_data[chat_id][key])
 
-if __name__ == "__main__":
-    logger.info("Starting Face Swap Bot...")
-    bot.run()
+app.run()
