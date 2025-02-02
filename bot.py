@@ -20,6 +20,10 @@ ENHANCE_APIS = [
     "https://api.nyxs.pw/tools/hd?url="
 ]
 
+# Fixed image URLs
+BG_REMOVE_IMAGE = "https://i.imghippo.com/files/eNXe4934iU.jpg"
+ENHANCE_IMAGE = "https://files.catbox.moe/utlaxp.jpg"
+
 # Initialize Pyrogram bot
 app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -69,7 +73,7 @@ def get_main_buttons():
 
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
-    user_selections[message.from_user.id] = "enhance_photo"  # Default selection
+    user_selections[message.from_user.id] = None  # Reset selection
     await message.reply_text(
         "Welcome! Choose an option:",
         reply_markup=get_main_buttons()
@@ -77,15 +81,35 @@ async def start_handler(client: Client, message: Message):
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
-    user_selections[callback_query.from_user.id] = callback_query.data
+    user_choice = callback_query.data
+    user_selections[callback_query.from_user.id] = user_choice
+
+    image_url = BG_REMOVE_IMAGE if user_choice == "remove_bg" else ENHANCE_IMAGE
+    description = "Send me a photo to remove its background!" if user_choice == "remove_bg" else "Send me a photo to enhance it!"
+
     await callback_query.message.edit_text(
-        f"✅ Selected: {callback_query.data.replace('_', ' ').title()}\nNow send a photo!",
+        description,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Back", callback_data="back")]
+        ])
+    )
+    await callback_query.message.reply_photo(image_url)
+
+@app.on_callback_query(filters.regex("back"))
+async def back_handler(client: Client, callback_query):
+    user_selections[callback_query.from_user.id] = None  # Reset selection
+    await callback_query.message.edit_text(
+        "Welcome back! Choose an option:",
         reply_markup=get_main_buttons()
     )
 
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
-    user_choice = user_selections.get(message.from_user.id, "enhance_photo")
+    user_choice = user_selections.get(message.from_user.id)
+    if not user_choice:
+        await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
+        return
+
     api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
