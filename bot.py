@@ -12,8 +12,9 @@ IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"  # Get from https://api.imgbb
 # Initialize Pyrogram client
 app = Client("bg_remover_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# API endpoint
-BG_REMOVE_API = "https://for-free.serv00.net/ai-removebg.php?image="
+# API endpoints
+BG_REMOVE_API_1 = "https://for-free.serv00.net/ai-removebg.php?image="  # First API
+BG_REMOVE_API_2 = "https://ar-api-08uk.onrender.com/remove?bg="  # Second API
 
 def upload_to_imgbb(image_path):
     """Upload image to imgBB and return URL"""
@@ -33,18 +34,31 @@ def upload_to_imgbb(image_path):
         return None
 
 def remove_background(image_url):
-    """Call background removal API"""
+    """Try both APIs to remove background"""
+    # Try API 1
     try:
-        response = requests.get(f"{BG_REMOVE_API}{image_url}")
+        response = requests.get(f"{BG_REMOVE_API_1}{image_url}")
         if response.status_code == 200:
             data = response.json()
             if data.get("status") == "success":
                 return data["results"][0]["image"]  # Return processed image URL
-        print(f"BG Removal API Failed: {response.status_code} - {response.text}")
-        return None
+        print(f"API 1 Failed: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"Error in BG Removal API: {e}")
-        return None
+        print(f"Error in API 1: {e}")
+
+    # Try API 2
+    try:
+        response = requests.get(f"{BG_REMOVE_API_2}{image_url}")
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == "success":
+                return data["results"][0]["image"]  # Return processed image URL
+        print(f"API 2 Failed: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Error in API 2: {e}")
+
+    # If both APIs fail, return None
+    return None
 
 @app.on_message(filters.command("start"))
 def start_handler(client: Client, message: Message):
@@ -65,10 +79,10 @@ async def photo_handler(client: Client, message: Message):
 
         print(f"Uploaded to imgBB: {imgbb_url}")
 
-        # Process image
+        # Process image using both APIs
         processed_url = remove_background(imgbb_url)
         if not processed_url:
-            await message.reply_text("❌ Background removal failed. Please try another image.")
+            await message.reply_text("❌ Both APIs failed to process the image. Please try another image.")
             return
 
         print(f"Processed image URL: {processed_url}")
