@@ -1,4 +1,5 @@
 import os
+import asyncio
 import httpx
 import tempfile
 from pyrogram import Client, filters
@@ -46,10 +47,7 @@ def get_main_buttons():
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_selections[message.from_user.id] = None  # Reset selection
-    await message.reply_text(
-        "Welcome! Choose an option:",
-        reply_markup=get_main_buttons()
-    )
+    await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
@@ -58,10 +56,7 @@ async def button_handler(client: Client, callback_query):
 
     if user_choice == "back":
         await callback_query.message.delete()
-        await callback_query.message.reply_text(
-            "Welcome! Choose an option:",
-            reply_markup=get_main_buttons()
-        )
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
     user_selections[user_id] = user_choice
@@ -170,7 +165,7 @@ async def perform_face_swap(source_path, target_path):
                 doFaceEnhancer=True,
                 api_name="/predict"
             )
-            return await upload_to_imgbb(result)
+            return result
         except Exception as e:
             print(f"Face swap API {api_name} failed: {e}")
     return None
@@ -185,11 +180,10 @@ async def upload_to_imgbb(image_path):
                     data={"key": IMGBB_API_KEY},
                     timeout=10
                 )
-        if response.status_code == 200:
-            return response.json()["data"]["url"]
+                if response.status_code == 200:
+                    return response.json()["data"]["url"]
         return None
-    except Exception as e:
-        print(f"Image upload failed: {e}")
+    except:
         return None
 
 async def process_image(image_url, api_list):
@@ -201,8 +195,7 @@ async def process_image(image_url, api_list):
                     data = response.json()
                     if data.get("status") == "success" or data.get("status") == 200:
                         return data["results"][0]["image"] if "results" in data else data["result"]
-            except Exception as e:
-                print(f"Error in processing image: {e}")
+            except:
                 continue
     return None
 
