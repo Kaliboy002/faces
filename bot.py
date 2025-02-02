@@ -85,21 +85,23 @@ async def button_handler(client: Client, callback_query):
     user_selections[callback_query.from_user.id] = user_choice
 
     image_url = BG_REMOVE_IMAGE if user_choice == "remove_bg" else ENHANCE_IMAGE
-    description = "Send me a photo to remove its background!" if user_choice == "remove_bg" else "Send me a photo to enhance it!"
+    description = "📷 Send a photo to remove its background!" if user_choice == "remove_bg" else "✨ Send a photo to enhance it!"
 
-    await callback_query.message.edit_text(
-        description,
+    await callback_query.message.delete()
+    await callback_query.message.reply_photo(
+        image_url,
+        caption=description,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 Back", callback_data="back")]
         ])
     )
-    await callback_query.message.reply_photo(image_url)
 
 @app.on_callback_query(filters.regex("back"))
 async def back_handler(client: Client, callback_query):
     user_selections[callback_query.from_user.id] = None  # Reset selection
-    await callback_query.message.edit_text(
-        "Welcome back! Choose an option:",
+    await callback_query.message.delete()
+    await callback_query.message.reply_text(
+        "Welcome! Choose an option:",
         reply_markup=get_main_buttons()
     )
 
