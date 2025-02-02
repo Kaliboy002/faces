@@ -170,7 +170,7 @@ async def perform_face_swap(source_path, target_path):
                 doFaceEnhancer=True,
                 api_name="/predict"
             )
-            return result
+            return await upload_to_imgbb(result)
         except Exception as e:
             print(f"Face swap API {api_name} failed: {e}")
     return None
@@ -188,7 +188,8 @@ async def upload_to_imgbb(image_path):
         if response.status_code == 200:
             return response.json()["data"]["url"]
         return None
-    except:
+    except Exception as e:
+        print(f"Image upload failed: {e}")
         return None
 
 async def process_image(image_url, api_list):
@@ -200,7 +201,8 @@ async def process_image(image_url, api_list):
                     data = response.json()
                     if data.get("status") == "success" or data.get("status") == 200:
                         return data["results"][0]["image"] if "results" in data else data["result"]
-            except:
+            except Exception as e:
+                print(f"Error in processing image: {e}")
                 continue
     return None
 
