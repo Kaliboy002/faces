@@ -1,133 +1,124 @@
 import os
-import aiohttp
+import logging
+import subprocess
 import asyncio
+import threading
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from gradio_client import Client as GradioClient, handle_file
-import aiofiles
+from fastapi import FastAPI
 
-# Gradio Client setup
-GRADIO_CLIENT = GradioClient("AmanDev/motion-blur")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Catbox API URL
-CATBOX_URL = "https://catbox.moe/user/api.php"
-
-# Telegram Bot Token
-BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"  # Replace with your Telegram bot token
-
-# Your API ID and API Hash from Telegram
+# Telegram Configuration
 API_ID = "15787995"  # Replace with your API ID
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
+BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Replace with your Bot Token
 
-# Create a Pyrogram client (Bot)
-bot = Client("motion_blur_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+# Pyrogram Bot Initialization
+app = Client("video_compressor_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Async function to upload to Catbox
-async def upload_to_catbox(file_path: str) -> str:
-    """Upload the file to Catbox and return the URL."""
+# FastAPI Initialization
+fastapi_app = FastAPI()
+
+# Temporary directory for storing files
+TEMP_DIR = "temp"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+# Function to compress video using FFmpeg
+async def compress_video(input_path: str, output_path: str) -> bool:
+    """
+    Compresses a video using FFmpeg asynchronously while maintaining quality.
+    Args:
+        input_path: Path to the input video file.
+        output_path: Path to save the compressed video file.
+    Returns:
+        bool: True if compression is successful, False otherwise.
+    """
     try:
-        async with aiohttp.ClientSession() as session:
-            async with aiofiles.open(file_path, "rb") as f:
-                data = aiohttp.FormData()
-                data.add_field("reqtype", "fileupload")
-                data.add_field("fileToUpload", await f.read(), filename=os.path.basename(file_path))
+        # FFmpeg command to compress video
+        command = [
+            "ffmpeg",
+            "-i", input_path,  # Input file
+            "-vf", "scale='min(1280,iw)':-2",  # Resize to max width of 1280px, maintain aspect ratio
+            "-c:v", "libx264",  # Use H.264 codec
+            "-crf", "24",  # Constant Rate Factor (lower = better quality, higher = smaller size)
+            "-preset", "fast",  # Faster compression for quick processing
+            "-c:a", "aac",  # Re-encode audio to AAC for compatibility
+            "-b:a", "128k",  # Set audio bitrate
+            output_path
+        ]
 
-                async with session.post(CATBOX_URL, data=data) as response:
-                    response.raise_for_status()
-                    return (await response.text()).strip()
-    except Exception as e:
-        print(f"Failed to upload file to Catbox: {e}")
-        return None
-
-# Async function to process the image with Gradio API
-async def process_image(image_path: str, distance_blur: int = 100, amount_blur: float = 0.75, amount_subject: float = 1) -> str:
-    """Process the image by applying motion blur and return the result filepath."""
-    try:
-        # Use the Gradio API to process the image
-        result = GRADIO_CLIENT.predict(
-            img=handle_file(image_path),  # Path to the image file
-            distance_blur=distance_blur,
-            amount_blur=amount_blur,
-            amount_subject=amount_subject,
-            api_name="/predict"
+        # Run the FFmpeg command asynchronously
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
 
-        # The result is a filepath to the processed image
-        if isinstance(result, str):
-            return result
-        else:
-            print(f"Unexpected result format: {result}")
-            return None
-    except Exception as e:
-        print(f"Error processing image: {e}")
-        return None
+        # Wait for the process to complete
+        await process.wait()
 
-# Handle the /start command
-@bot.on_message(filters.command("start"))
+        # Check if process completed successfully
+        return process.returncode == 0
+    except Exception as e:
+        logger.error(f"Error compressing video: {e}")
+        return False
+
+# Start command handler
+@app.on_message(filters.command("start"))
 async def start(client: Client, message: Message):
     """Handles the /start command."""
-    await message.reply(
-        "Welcome! Send me a photo to apply motion blur.\n\n"
-        "You can customize the blur effect by sending:\n"
-        "`/blur <distance> <amount> <subject>`\n\n"
-        "Example: `/blur 100 0.75 1`"
+    await message.reply_text(
+        "🎥 Welcome to the Video Compressor Bot!\n\n"
+        "Send me a video file, and I will compress it for you while maintaining quality."
     )
 
-# Handle photo messages
-@bot.on_message(filters.photo)
-async def handle_photo(client: Client, message: Message):
-    """Handles photo messages and processes them."""
+# Video message handler
+@app.on_message(filters.video)
+async def handle_video(client: Client, message: Message):
+    """Handles video files and compresses them."""
     try:
-        # Download the photo sent by the user
-        file_path = await message.download()
+        # Notify the user that the video is being processed
+        status_msg = await message.reply_text("⏳ Processing your video...")
 
-        # Default blur parameters
-        distance_blur = 100
-        amount_blur = 0.75
-        amount_subject = 1
+        # Download the video file asynchronously
+        video_path = await message.download(file_name=os.path.join(TEMP_DIR, f"input_video_{message.id}.mp4"))
 
-        # Check if the user provided custom parameters in the caption
-        if message.caption and message.caption.startswith("/blur"):
-            try:
-                _, distance, amount, subject = message.caption.split()
-                distance_blur = float(distance)
-                amount_blur = float(amount)
-                amount_subject = float(subject)
-            except Exception as e:
-                print(f"Failed to parse blur parameters: {e}")
-                await message.reply("Invalid blur parameters. Using default values.")
+        # Define the output path for the compressed video
+        output_path = os.path.join(TEMP_DIR, f"compressed_video_{message.id}.mp4")
 
-        # Process the image via the Gradio API
-        print(f"Processing image: {file_path}")
-        processed_image_path = await process_image(file_path, distance_blur, amount_blur, amount_subject)
-
-        if processed_image_path:
-            # Upload the processed image to Catbox
-            catbox_url = await upload_to_catbox(processed_image_path)
-
-            if catbox_url:
-                # Send the Catbox URL back to the user
-                await message.reply_photo(
-                    catbox_url,
-                    caption=f"✅ Here's your motion-blurred image!\n\n"
-                            f"Blur Distance: {distance_blur}\n"
-                            f"Blur Amount: {amount_blur}\n"
-                            f"Subject Amount: {amount_subject}"
-                )
-            else:
-                await message.reply("Failed to upload the image to Catbox.")
+        # Compress the video asynchronously
+        if await compress_video(video_path, output_path):
+            # Send the compressed video back to the user
+            await message.reply_video(
+                video=output_path,
+                caption="✅ Here is your compressed video!",
+                reply_to_message_id=message.id
+            )
+            await status_msg.delete()  # Delete the status message
         else:
-            await message.reply("Failed to process the image.")
+            await message.reply_text("❌ Failed to compress the video. Please try again.")
 
-        # Clean up downloaded and processed files
-        os.remove(file_path)
-        if processed_image_path:
-            os.remove(processed_image_path)
+        # Clean up temporary files
+        os.remove(video_path)
+        os.remove(output_path)
     except Exception as e:
-        await message.reply(f"An error occurred: {str(e)}")
-        print(f"Error: {str(e)}")
+        logger.error(f"Error handling video: {e}")
+        await message.reply_text("⚠️ An error occurred. Please try again.")
 
-# Run the bot
+# FastAPI startup function
+def start_fastapi():
+    import uvicorn
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
+
+# Run FastAPI in a separate thread
 if __name__ == "__main__":
-    print("Starting Motion Blur Bot...")
-    bot.run()
+    # Start FastAPI in a separate thread
+    thread = threading.Thread(target=start_fastapi)
+    thread.start()
+
+    # Start the Telegram bot
+    logger.info("Starting Video Compressor Bot...")
+    app.run()
