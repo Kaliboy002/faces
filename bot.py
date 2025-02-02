@@ -11,7 +11,7 @@ GRADIO_CLIENT = GradioClient("Kaliboy002/face-swapm")
 
 # ImgBB API URL and Key
 IMGBB_API_URL = "https://api.imgbb.com/1/upload"
-IMGBB_API_KEY = "YOUR_IMGBB_API_KEY"  # Replace with your ImgBB API key
+IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"  # Replace with your ImgBB API key
 
 # Telegram Bot Credentials
 BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Replace with your Telegram bot token
