@@ -2,10 +2,9 @@ import os
 import logging
 import subprocess
 import asyncio
-import threading
+import imageio
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from fastapi import FastAPI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,12 +18,13 @@ BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Replace with you
 # Pyrogram Bot Initialization
 app = Client("video_compressor_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# FastAPI Initialization
-fastapi_app = FastAPI()
-
 # Temporary directory for storing files
 TEMP_DIR = "temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
+
+# Function to get FFmpeg executable
+def get_ffmpeg():
+    return imageio.plugins.ffmpeg.get_exe()
 
 # Function to compress video using FFmpeg
 async def compress_video(input_path: str, output_path: str) -> bool:
@@ -37,9 +37,11 @@ async def compress_video(input_path: str, output_path: str) -> bool:
         bool: True if compression is successful, False otherwise.
     """
     try:
+        ffmpeg_path = get_ffmpeg()
+        
         # FFmpeg command to compress video
         command = [
-            "ffmpeg",
+            ffmpeg_path,
             "-i", input_path,  # Input file
             "-vf", "scale='min(1280,iw)':-2",  # Resize to max width of 1280px, maintain aspect ratio
             "-c:v", "libx264",  # Use H.264 codec
@@ -108,17 +110,7 @@ async def handle_video(client: Client, message: Message):
         logger.error(f"Error handling video: {e}")
         await message.reply_text("⚠️ An error occurred. Please try again.")
 
-# FastAPI startup function
-def start_fastapi():
-    import uvicorn
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
-
-# Run FastAPI in a separate thread
+# Run the bot
 if __name__ == "__main__":
-    # Start FastAPI in a separate thread
-    thread = threading.Thread(target=start_fastapi)
-    thread.start()
-
-    # Start the Telegram bot
     logger.info("Starting Video Compressor Bot...")
     app.run()
