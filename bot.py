@@ -11,8 +11,9 @@ BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"
 # Initialize the Pyrogram client
 app = Client("image_enhancer_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# API endpoint
-ENHANCE_API = "https://api.nyxs.pw/tools/hd?url="
+# API endpoints
+PRIMARY_API = "https://ar-api-08uk.onrender.com/remini?url="  # Primary API
+FALLBACK_API = "https://api.nyxs.pw/tools/hd?url="  # Fallback API
 
 # Function to upload image to imgbb
 def upload_to_imgbb(image_path):
@@ -29,6 +30,27 @@ def upload_to_imgbb(image_path):
     except Exception as e:
         print(f"Error uploading to imgBB: {e}")
         return None
+
+# Function to enhance image using APIs
+def enhance_image(image_url):
+    # Try the primary API first
+    try:
+        response = requests.get(f"{PRIMARY_API}{image_url}")
+        if response.status_code == 200 and response.json().get("status") == 200:
+            return response.json()["result"]  # Return enhanced image URL
+    except Exception as e:
+        print(f"Primary API Failed: {e}")
+
+    # If primary API fails, try the fallback API
+    try:
+        response = requests.get(f"{FALLBACK_API}{image_url}")
+        if response.status_code == 200 and response.json().get("status"):
+            return response.json()["result"]  # Return enhanced image URL
+    except Exception as e:
+        print(f"Fallback API Failed: {e}")
+
+    # If both APIs fail, return None
+    return None
 
 # Start command handler
 @app.on_message(filters.command("start"))
@@ -51,17 +73,14 @@ def enhance_photo(client: Client, message: Message):
 
         print(f"Photo uploaded to imgBB: {imgbb_url}")
 
-        # Enhance the photo using the API
-        enhance_response = requests.get(f"{ENHANCE_API}{imgbb_url}")
-        if enhance_response.status_code == 200:
-            enhanced_url = enhance_response.json()["result"]
+        # Enhance the photo using the APIs
+        enhanced_url = enhance_image(imgbb_url)
+        if enhanced_url:
             print(f"Enhanced photo URL: {enhanced_url}")
-
-            # Send the enhanced photo back to the user
             message.reply_photo(enhanced_url, caption="Here's your enhanced photo!")
         else:
-            print(f"Enhance API Failed: {enhance_response.status_code} - {enhance_response.text}")
-            message.reply_text("Sorry, the enhancement API is not working. Please try again later.")
+            print("Both APIs failed to enhance the photo.")
+            message.reply_text("Sorry, both APIs failed to enhance the photo. Please try again later.")
 
     except Exception as e:
         print(f"Error processing photo: {e}")
