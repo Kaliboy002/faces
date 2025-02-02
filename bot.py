@@ -59,14 +59,8 @@ def remove_background(client, message):
                 # Extract the result URL for the processed image
                 processed_image_url = data["result"]
 
-                # 📤 Upload the processed image to Catbox
-                final_url = upload_to_catbox(processed_image_url)
-                if final_url:
-                    message.reply_photo(final_url, caption="✅ Here is your background-removed image!")
-                    message.reply_text(f"🔗 **Permanent Link:** {final_url}", disable_web_page_preview=True)
-                else:
-                    message.reply_text("✅ Here is your background-removed image (temporary):")
-                    message.reply_photo(processed_image_url)
+                # Send the processed image URL directly to the user
+                message.reply_photo(processed_image_url, caption="✅ Here is your background-removed image!")
 
                 # Cleanup
                 os.remove(file_path)  # Clean up original file
