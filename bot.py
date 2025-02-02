@@ -12,7 +12,7 @@ BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"
 app = Client("image_enhancer_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # API endpoints
-PRIMARY_API = "https://ar-api-08uk.onrender.com/remini?url="  # Primary API
+PRIMARY_API = "https://ar-ap1i-08uk.onrender.com/remini?url="  # Primary API
 FALLBACK_API = "https://api.nyxs.pw/tools/hd?url="  # Fallback API
 
 # Function to upload image to imgbb
