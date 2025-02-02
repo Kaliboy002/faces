@@ -5,6 +5,7 @@ import tempfile
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, file
+from concurrent.futures import ThreadPoolExecutor
 
 # Bot credentials
 API_ID = 15787995  # Replace with your API ID
@@ -35,6 +36,9 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 # Dictionary to store user selections and data
 user_selections = {}
 user_data = {}
+
+# Thread pool for blocking tasks
+executor = ThreadPoolExecutor(max_workers=4)
 
 # Send selection buttons
 def get_main_buttons():
@@ -113,12 +117,18 @@ async def handle_face_swap(client: Client, message: Message):
         user_data[user_id]["target_path"] = target_path
         await message.reply_text("🔄 Processing face swap, please wait...")
 
-        # Perform face swap
-        swapped_image_path = await perform_face_swap(user_data[user_id]["source_path"], user_data[user_id]["target_path"])
-        if swapped_image_path:
-            await message.reply_photo(swapped_image_path, caption="✅ Face swap completed!")
-        else:
-            await message.reply_text("❌ Face swap failed. Please try again.")
+        # Perform face swap in a separate thread to avoid blocking
+        try:
+            swapped_image_path = await asyncio.to_thread(
+                perform_face_swap, user_data[user_id]["source_path"], user_data[user_id]["target_path"]
+            )
+            if swapped_image_path:
+                await message.reply_photo(swapped_image_path, caption="✅ Face swap completed!")
+            else:
+                await message.reply_text("❌ Face swap failed. Please try again.")
+        except Exception as e:
+            print(f"Face swap error: {e}")
+            await message.reply_text("❌ An error occurred during face swap. Please try again.")
 
         # Cleanup
         cleanup_files(user_id)
@@ -155,7 +165,7 @@ async def download_photo(client: Client, message: Message):
     await message.download(temp_path)
     return temp_path
 
-async def perform_face_swap(source_path, target_path):
+def perform_face_swap(source_path, target_path):
     for api_name in FACE_SWAP_APIS:
         try:
             client = GradioClient(api_name)
