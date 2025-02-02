@@ -3,95 +3,91 @@ import requests
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# Replace with your bot token
+# Replace with your credentials
 API_ID = 15787995  # Get from https://my.telegram.org
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Get from https://my.telegram.org
 BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"
+IMGBB_API_KEY = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Get from https://api.imgbb.com/
 
-# Initialize the Pyrogram client
-app = Client("image_enhancer_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# Initialize Pyrogram client
+app = Client("bg_remover_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# API endpoints
-PRIMARY_API = "https://ar-api-08uk.onrender.com/remini?url="  # Primary API
-FALLBACK_API = "https://api.3nyxs.pw/tools/hd?url="  # Fallback API
+# API endpoint
+BG_REMOVE_API = "https://for-free.serv00.net/ai-removebg.php?image="
 
-# Function to upload image to imgbb
 def upload_to_imgbb(image_path):
-    imgbb_api_key = "b34225445e8edd8349d8a9fe68f20369"  # Replace with your imgbb API key
-    upload_url = "https://api.imgbb.com/1/upload"
+    """Upload image to imgBB and return URL"""
     try:
         with open(image_path, "rb") as file:
-            response = requests.post(upload_url, files={"image": file}, data={"key": imgbb_api_key})
+            response = requests.post(
+                "https://api.imgbb.com/1/upload",
+                files={"image": file},
+                data={"key": IMGBB_API_KEY}
+            )
             if response.status_code == 200:
                 return response.json()["data"]["url"]
-            else:
-                print(f"imgBB Upload Failed: {response.status_code} - {response.text}")
-                return None
+            print(f"imgBB Upload Failed: {response.status_code} - {response.text}")
+            return None
     except Exception as e:
         print(f"Error uploading to imgBB: {e}")
         return None
 
-# Function to enhance image using APIs
-def enhance_image(image_url):
-    # Try the primary API first
+def remove_background(image_url):
+    """Call background removal API"""
     try:
-        response = requests.get(f"{PRIMARY_API}{image_url}")
-        if response.status_code == 200 and response.json().get("status") == 200:
-            return response.json()["result"]  # Return enhanced image URL
+        response = requests.get(f"{BG_REMOVE_API}{image_url}")
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == "success":
+                return data["results"][0]["image"]  # Return processed image URL
+        print(f"BG Removal API Failed: {response.status_code} - {response.text}")
+        return None
     except Exception as e:
-        print(f"Primary API Failed: {e}")
+        print(f"Error in BG Removal API: {e}")
+        return None
 
-    # If primary API fails, try the fallback API
-    try:
-        response = requests.get(f"{FALLBACK_API}{image_url}")
-        if response.status_code == 200 and response.json().get("status"):
-            return response.json()["result"]  # Return enhanced image URL
-    except Exception as e:
-        print(f"Fallback API Failed: {e}")
-
-    # If both APIs fail, return None
-    return None
-
-# Start command handler
 @app.on_message(filters.command("start"))
-def start(client: Client, message: Message):
-    message.reply_text("Hi! Send me a photo, and I'll enhance it for you.")
+def start_handler(client: Client, message: Message):
+    message.reply_text("🖼️ Send me a photo to remove its background!")
 
-# Photo handler
 @app.on_message(filters.photo)
-def enhance_photo(client: Client, message: Message):
+async def photo_handler(client: Client, message: Message):
     try:
         # Download the photo
-        photo_path = message.download()
-        print(f"Photo downloaded to: {photo_path}")
+        photo_path = await message.download()
+        print(f"Downloaded photo: {photo_path}")
 
-        # Upload the photo to imgBB
+        # Upload to imgBB
         imgbb_url = upload_to_imgbb(photo_path)
         if not imgbb_url:
-            message.reply_text("Failed to upload the photo to imgBB. Please try again.")
+            await message.reply_text("❌ Failed to upload image. Please try again.")
             return
 
-        print(f"Photo uploaded to imgBB: {imgbb_url}")
+        print(f"Uploaded to imgBB: {imgbb_url}")
 
-        # Enhance the photo using the APIs
-        enhanced_url = enhance_image(imgbb_url)
-        if enhanced_url:
-            print(f"Enhanced photo URL: {enhanced_url}")
-            message.reply_photo(enhanced_url, caption="Here's your enhanced photo!")
-        else:
-            print("Both APIs failed to enhance the photo.")
-            message.reply_text("Sorry, both APIs failed to enhance the photo. Please try again later.")
+        # Process image
+        processed_url = remove_background(imgbb_url)
+        if not processed_url:
+            await message.reply_text("❌ Background removal failed. Please try another image.")
+            return
+
+        print(f"Processed image URL: {processed_url}")
+
+        # Send result
+        await message.reply_photo(
+            processed_url,
+            caption="✅ Background removed successfully!"
+        )
 
     except Exception as e:
-        print(f"Error processing photo: {e}")
-        message.reply_text("Sorry, something went wrong while processing your photo.")
+        print(f"Error processing image: {e}")
+        await message.reply_text("❌ An error occurred. Please try again.")
 
     finally:
-        # Clean up the downloaded file
-        if os.path.exists(photo_path):
+        # Cleanup
+        if photo_path and os.path.exists(photo_path):
             os.remove(photo_path)
 
-# Run the bot
 if __name__ == "__main__":
     print("Bot started...")
     app.run()
