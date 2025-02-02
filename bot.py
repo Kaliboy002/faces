@@ -5,6 +5,7 @@ import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from gradio_client import Client as GradioClient, handle_file
+from PIL import Image
 
 # Gradio Client setup for Hepzeka API
 HEPZEKA_API = GradioClient("mukaist/finegrain-image-enhancer")
@@ -18,7 +19,7 @@ BOT_TOKEN = "7844051995:AAGQAcxdvFs7Xq_Szji5gMRndZpyt6_jn0c"  # Replace with you
 
 # Your API ID and API Hash from Telegram
 API_ID = "15787995"  # Replace with your API ID
-API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
+API_HASH = "b34225445e8edd8349d8a9fe68f20369"  # Replace with your API Hash
 
 # Create a Pyrogram client (Bot)
 bot = Client("image_enhancer_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
@@ -26,6 +27,24 @@ bot = Client("image_enhancer_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Resize the image to a smaller size (max 1024px on the longest side)
+def resize_image(image_path: str, max_size: int = 1024):
+    """Resize the image to a manageable size for faster processing."""
+    with Image.open(image_path) as img:
+        width, height = img.size
+        if width > height:
+            ratio = max_size / width
+            new_width = max_size
+            new_height = int(height * ratio)
+        else:
+            ratio = max_size / height
+            new_width = int(width * ratio)
+            new_height = max_size
+        img = img.resize((new_width, new_height), Image.LANCZOS)
+        resized_path = image_path.replace(".jpg", "_resized.jpg")
+        img.save(resized_path)
+        return resized_path
 
 # Async function to upload the image to ImgBB and return the URL
 async def upload_to_imgbb(file_path: str) -> str:
@@ -64,7 +83,7 @@ async def enhance_image(image_path: str, prompt: str = "", negative_prompt: str 
             tile_width=112,
             tile_height=144,
             denoise_strength=0.35,
-            num_inference_steps=18,
+            num_inference_steps=12,  # Reduced inference steps for faster processing
             solver="DDIM",
             api_name="/process"
         )
@@ -98,6 +117,9 @@ async def handle_photo(client: Client, message: Message):
         # Download the photo sent by the user
         file_path = await message.download()
 
+        # Resize the image to a smaller size
+        resized_image_path = resize_image(file_path)
+
         # Default enhancement parameters
         prompt = ""
         negative_prompt = ""
@@ -113,8 +135,8 @@ async def handle_photo(client: Client, message: Message):
                 await message.reply("Invalid enhancement parameters. Using default values.")
 
         # Enhance the image via the Hepzeka API
-        logger.info(f"Enhancing image: {file_path}")
-        enhanced_image_path = await enhance_image(file_path, prompt, negative_prompt, upscale_factor)
+        logger.info(f"Enhancing image: {resized_image_path}")
+        enhanced_image_path = await enhance_image(resized_image_path, prompt, negative_prompt, upscale_factor)
 
         if enhanced_image_path:
             # Upload the enhanced image to ImgBB
@@ -135,6 +157,8 @@ async def handle_photo(client: Client, message: Message):
 
         # Clean up downloaded and processed files
         os.remove(file_path)
+        if resized_image_path != file_path:
+            os.remove(resized_image_path)
         if enhanced_image_path:
             os.remove(enhanced_image_path)
     except Exception as e:
