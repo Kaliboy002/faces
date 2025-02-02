@@ -1,8 +1,11 @@
-aiofiles
-pyrogram
 requests
-python-dotenv
-aiohttp
-pymongo
-tgcrypto
+python-ffmpeg
+ffmpeg
+pyrogram
 gradio_client
+tgcrypto
+aiohttp
+aiofiles
+pymongo
+fastapi
+uvicorn
