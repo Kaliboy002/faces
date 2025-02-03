@@ -2,22 +2,23 @@ import os
 import asyncio
 import httpx
 import tempfile
+import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, file
-from pymongo import MongoClient
+from concurrent.futures import ThreadPoolExecutor
+
+# Bot credentials
+API_ID = 15787995
+API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
+BOT_TOKEN = "7844051995:AAHqeWncuLftLXDHIMafOH_bkl3zGxkIbGg"
+IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 
 # MongoDB connection
 MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["shah"]
-users_collection = db["users"]
-
-# Bot credentials
-API_ID = 15787995  # Replace with your API ID
-API_HASH = "e51a3154d2e0c45e5ed70251d68382de"  # Replace with your API Hash
-BOT_TOKEN = "7844051995:AAHqeWncuLftLXDHIMafOH_bkl3zGxkIbGg"  # Replace with your Telegram Bot Token
-IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"  # Replace with your imgBB API key
+mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
+db = mongo_client.shah
+users_col = db.users
 
 # API endpoints
 BG_REMOVE_APIS = [
@@ -43,6 +44,9 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 user_selections = {}
 user_data = {}
 
+# Thread pool for blocking tasks
+executor = ThreadPoolExecutor(max_workers=4)
+
 # Send selection buttons
 def get_main_buttons():
     return InlineKeyboardMarkup([
@@ -51,37 +55,48 @@ def get_main_buttons():
         [InlineKeyboardButton("👤 Face Swap", callback_data="face_swap")]
     ])
 
-# Initialize user data in MongoDB
-async def initialize_user(user_id, referrer_id=None):
-    user = users_collection.find_one({"user_id": user_id})
-    if not user:
-        users_collection.insert_one({
-            "user_id": user_id,
-            "face_swap_count": 2,  # Initial free tier
-            "referral_count": 0,
-            "referrer_id": referrer_id,
-            "referral_link": f"https://t.me/your_bot_username?start={user_id}"
-        })
-        if referrer_id:
-            # Add 1 face swap chance to the referrer
-            users_collection.update_one(
-                {"user_id": referrer_id},
-                {"$inc": {"face_swap_count": 1, "referral_count": 1}}
-            )
-            # Notify the referrer
-            await app.send_message(referrer_id, f"🎉 A new user joined using your referral link! You've received 1 additional face swap chance.")
-
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
-    referrer_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
 
-    # Initialize user in MongoDB
-    await initialize_user(user_id, referrer_id)
-
-    user_selections[user_id] = None  # Reset selection
-    await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+    # Check if user is new
+    user = await users_col.find_one({"_id": user_id})
+    if not user:
+        # Create new user document
+        referrer_id = None
+        if len(args) > 1 and args[1].isdigit():
+            referrer_id = int(args[1])
+        user_doc = {
+            "_id": user_id,
+            "name": message.from_user.first_name,
+            "face_swaps_left": 2,
+            "invites_sent": 0,
+            "referrals": [],
+            "referral_link": f"https://t.me/{BOT_TOKEN.split(':')[0]}?start={user_id}"
+        }
+        if referrer_id:
+            user_doc["referrer"] = referrer_id
+            # Update referrer's face swaps
+            await users_col.update_one(
+                {"_id": referrer_id},
+                {"$inc": {"face_swaps_left": 1}}
+            )
+            # Notify referrer
+            try:
+                await app.send_message(
+                    referrer_id,
+                    f"🎉 User {message.from_user.first_name} started the bot using your referral link! You've received 1 additional face swap."
+                )
+            except:
+                pass
+        await users_col.insert_one(user_doc)
+        await message.reply_text(
+            f"Welcome! You have 2 free face swaps. Share your referral link to get more swaps:\n\n{user_doc['referral_link']}",
+            reply_markup=get_main_buttons()
+        )
+    else:
+        await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
@@ -96,15 +111,12 @@ async def button_handler(client: Client, callback_query):
     user_selections[user_id] = user_choice
 
     if user_choice == "face_swap":
-        # Check face swap count
-        user = users_collection.find_one({"user_id": user_id})
-        if user["face_swap_count"] <= 0:
-            await callback_query.message.reply_text(
-                "❌ You've used all your free face swaps.\n"
-                f"🔗 Invite friends using your referral link to get more chances: {user['referral_link']}\n"
-                f"👥 Users invited: {user['referral_count']}"
-            )
+        # Check face swap limit
+        user = await users_col.find_one({"_id": user_id})
+        if user["face_swaps_left"] <= 0:
+            await callback_query.message.reply_text("❌ You've used all your free face swaps. Share your referral link to get more!")
             return
+
         user_data[user_id] = {"step": "awaiting_source"}
         await callback_query.message.delete()
         await callback_query.message.reply_text("📷 Send the source image (face to swap).")
@@ -145,6 +157,12 @@ async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
     user_state = user_data.get(user_id, {})
 
+    # Check if user has face swaps left
+    user = await users_col.find_one({"_id": user_id})
+    if user["face_swaps_left"] <= 0:
+        await message.reply_text("❌ You've used all your free face swaps. Share your referral link to get more!")
+        return
+
     if user_state.get("step") == "awaiting_source":
         # Save source photo
         source_path = await download_photo(client, message)
@@ -163,10 +181,10 @@ async def handle_face_swap(client: Client, message: Message):
             )
             if swapped_image_path:
                 await message.reply_photo(swapped_image_path, caption="✅ Face swap completed!")
-                # Deduct face swap count
-                users_collection.update_one(
-                    {"user_id": user_id},
-                    {"$inc": {"face_swap_count": -1}}
+                # Decrease face swaps left
+                await users_col.update_one(
+                    {"_id": user_id},
+                    {"$inc": {"face_swaps_left": -1}}
                 )
             else:
                 await message.reply_text("❌ Face swap failed. Please try again.")
