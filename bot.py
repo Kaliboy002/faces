@@ -119,6 +119,14 @@ async def add_handler(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
+@app.on_message(filters.command("reset") & filters.user(ADMIN_CHAT_ID))
+async def reset_handler(client: Client, message: Message):
+    try:
+        await users_col.delete_many({})
+        await message.reply_text("✅ All user data has been reset.")
+    except Exception as e:
+        await message.reply_text(f"❌ An error occurred: {e}")
+
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
     user_choice = callback_query.data
@@ -178,11 +186,10 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
         return
 
-    if user_id in processing_users:
-        await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
-        return
-
     if user_choice == "face_swap":
+        if user_id in processing_users:
+            await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
+            return
         await handle_face_swap(client, message)
     else:
         processing_users.add(user_id)
@@ -215,6 +222,7 @@ async def handle_face_swap(client: Client, message: Message):
         target_path = await download_photo(client, message)
         user_data[user_id]["target_path"] = target_path
 
+        processing_users.add(user_id)
         await message.reply_text("🔄 Processing photo, please wait...")
 
         try:
@@ -238,6 +246,8 @@ async def handle_face_swap(client: Client, message: Message):
         except Exception as e:
             print(f"Face swap error: {e}")
             await message.reply_text("❌ An error occurred during face swap. Please try again.")
+        finally:
+            processing_users.remove(user_id)
 
         cleanup_files(user_id)
         user_data.pop(user_id, None)
