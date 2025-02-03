@@ -132,7 +132,7 @@ async def button_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
     if user_choice == "back":
-        await callback_query.message.delete()
+        # Send the main menu without deleting the processed photo message
         await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
@@ -143,7 +143,10 @@ async def button_handler(client: Client, callback_query):
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
             await callback_query.message.reply_text(
-                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!"
+                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Back", callback_data="back")]
+                ])
             )
             return
 
@@ -208,7 +211,10 @@ async def handle_face_swap(client: Client, message: Message):
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
         await message.reply_text(
-            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!"
+            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
         )
         return
 
