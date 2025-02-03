@@ -1,4 +1,4 @@
-import os
+لimport os
 import asyncio
 import httpx
 import tempfile
@@ -29,14 +29,14 @@ BG_REMOVE_APIS = [
     "https://ar-api-08uk.onrender.com/remove?bg="
 ]
 ENHANCE_APIS = [
-    "https://ar-api-08uk.onrender.comtt/remini?url=",
+    "https://ar-api-08uk.onrender.com/remini?url=",
     "https://api.nyxs.pw/tools/hd?url="
 ]
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
-    "Kaliboy002/face-swapm",
-    "Jonny001FUCK/Image-Face-Swap",
+    "Kaliboy0012/face-swapm",
+    "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
 
@@ -134,6 +134,9 @@ async def button_handler(client: Client, callback_query):
 
     if user_choice == "back":
         await callback_query.message.delete()
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        return
+    elif user_choice == "processed_back":
         await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
@@ -235,7 +238,7 @@ async def handle_face_swap(client: Client, message: Message):
                     swapped_image_path,
                     caption="✅ Face swap completed!",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 Back", callback_data="back")]
+                        [InlineKeyboardButton("🔙 Back", callback_data="processed_back")]
                     ])
                 )
                 await users_col.update_one(
