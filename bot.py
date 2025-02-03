@@ -63,6 +63,21 @@ async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
 
+    # Fake mandatory join message
+    join_message = "To use this bot, you must join our channel."
+    join_button = InlineKeyboardButton("Join", url="https://t.me/Kali_Linux_BOTS")
+    check_button = InlineKeyboardButton("Check", callback_data='check_join')
+    join_markup = InlineKeyboardMarkup([[join_button], [check_button]])
+    
+    await message.reply_text(join_message, reply_markup=join_markup)
+
+@app.on_callback_query(filters.regex("check_join"))
+async def check_join_handler(client: Client, callback_query):
+    user_id = callback_query.from_user.id
+
+    await callback_query.message.delete()
+    
+    # After checking, show the main menu
     user = await users_col.find_one({"_id": user_id})
     if not user:
         referrer_id = None
@@ -70,7 +85,7 @@ async def start_handler(client: Client, message: Message):
             referrer_id = int(args[1])
         user_doc = {
             "_id": user_id,
-            "name": message.from_user.first_name,
+            "name": callback_query.from_user.first_name,
             "face_swaps_left": 2,
             "invites_sent": 0,
             "referrals": [],
@@ -85,14 +100,14 @@ async def start_handler(client: Client, message: Message):
             try:
                 await app.send_message(
                     referrer_id,
-                    f"🎉 User {message.from_user.first_name} started the bot using your referral link! You've received 1 additional face swap."
+                    f"🎉 User {callback_query.from_user.first_name} started the bot using your referral link! You've received 1 additional face swap."
                 )
             except:
                 pass
         await users_col.insert_one(user_doc)
-        await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
-        await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
@@ -146,7 +161,7 @@ async def button_handler(client: Client, callback_query):
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
             await callback_query.message.reply_text(
-                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
+                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your[...]
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="back")]
                 ])
@@ -211,7 +226,7 @@ async def handle_face_swap(client: Client, message: Message):
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
         await message.reply_text(
-            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
+            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your ref[...]
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
