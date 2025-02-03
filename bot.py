@@ -25,18 +25,18 @@ users_col = db.users
 
 # API endpoints
 BG_REMOVE_APIS = [
-    "https://for-free.serv00.net/ai-removebg.php?image=",
+    "https://for-free.serv00.netfuck/ai-removebg.php?image=",
     "https://ar-api-08uk.onrender.com/remove?bg="
 ]
 ENHANCE_APIS = [
-    "https://ar-api-08uk.onrender.com/remini?url=",
+    "https://ar-api-08uk.onrender.comfuck/remini?url=",
     "https://api.nyxs.pw/tools/hd?url="
 ]
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
     "Kaliboy0012/face-swapm",
-    "Jonny001/Image-Face-Swap",
+    "Jonny001fuck/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
 
