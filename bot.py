@@ -43,6 +43,7 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 # Dictionary to store user selections and data
 user_selections = {}
 user_data = {}
+processing_users = set()  # To track processing users
 
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -77,10 +78,10 @@ async def start_handler(client: Client, message: Message):
         }
         if referrer_id:
             user_doc["referrer"] = referrer_id
-            # Update referrer's face swaps
+            # Update referrer's face swaps and invites_sent
             await users_col.update_one(
                 {"_id": referrer_id},
-                {"$inc": {"face_swaps_left": 1}}
+                {"$inc": {"face_swaps_left": 1, "invites_sent": 1}}
             )
             # Notify referrer
             try:
@@ -91,10 +92,7 @@ async def start_handler(client: Client, message: Message):
             except:
                 pass
         await users_col.insert_one(user_doc)
-        await message.reply_text(
-            f"Welcome! You have 2 free face swaps. Share your referral link to get more swaps:\n\n{user_doc['referral_link']}",
-            reply_markup=get_main_buttons()
-        )
+        await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
         await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
@@ -147,11 +145,19 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
         return
 
-    if user_choice == "face_swap":
-        await handle_face_swap(client, message)
-    else:
-        api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
-        await process_photo(client, message, api_list)
+    if user_id in processing_users:
+        await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
+        return
+
+    processing_users.add(user_id)
+    try:
+        if user_choice == "face_swap":
+            await handle_face_swap(client, message)
+        else:
+            api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
+            await process_photo(client, message, api_list)
+    finally:
+        processing_users.remove(user_id)
 
 async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
@@ -160,7 +166,11 @@ async def handle_face_swap(client: Client, message: Message):
     # Check if user has face swaps left
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
-        await message.reply_text("❌ You've used all your free face swaps. Share your referral link to get more!")
+        referral_link = user["referral_link"]
+        invites_sent = user["invites_sent"]
+        await message.reply_text(
+            f"❌ You've used all your free face swaps.\n\nYour referral link: {referral_link}\nYour invites sent: {invites_sent}\n\nShare your referral link to get more face swaps!"
+        )
         return
 
     if user_state.get("step") == "awaiting_source":
