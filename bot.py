@@ -112,7 +112,9 @@ async def button_handler(client: Client, callback_query):
         # Check face swap limit
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
-            await callback_query.message.reply_text("❌ You've used all your free face swaps. Share your referral link to get more!")
+            await callback_query.message.reply_text(
+                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!"
+            )
             return
 
         user_data[user_id] = {"step": "awaiting_source"}
@@ -151,6 +153,7 @@ async def photo_handler(client: Client, message: Message):
 
     processing_users.add(user_id)
     try:
+        await message.reply_text("🔄 Processing photo, please wait...")
         if user_choice == "face_swap":
             await handle_face_swap(client, message)
         else:
@@ -166,10 +169,8 @@ async def handle_face_swap(client: Client, message: Message):
     # Check if user has face swaps left
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
-        referral_link = user["referral_link"]
-        invites_sent = user["invites_sent"]
         await message.reply_text(
-            f"❌ You've used all your free face swaps.\n\nYour referral link: {referral_link}\nYour invites sent: {invites_sent}\n\nShare your referral link to get more face swaps!"
+            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!"
         )
         return
 
