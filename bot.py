@@ -23,8 +23,9 @@ mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 db = mongo_client.shah
 users_col = db.users
 
-# Channel details
-REQUIRED_CHANNEL = -1002069323367  # Replace with your channel ID
+# Channel Information
+CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with your channel username
+CHANNEL_LINK = f"https://t.me/{CHANNEL_USERNAME}"
 
 # API endpoints
 BG_REMOVE_APIS = [
@@ -61,11 +62,12 @@ def get_main_buttons():
         [InlineKeyboardButton("👤 Face Swap", callback_data="face_swap")]
     ])
 
-async def check_channel_join(user_id):
+async def is_user_subscribed(user_id):
     try:
-        member = await app.get_chat_member(REQUIRED_CHANNEL, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except:
+        chat_member = await app.get_chat_member(CHANNEL_USERNAME, user_id)
+        return chat_member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        print(f"Error checking subscription: {e}")
         return False
 
 @app.on_message(filters.command("start"))
@@ -73,15 +75,12 @@ async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
 
-    # Check if user has joined the required channel
-    joined = await check_channel_join(user_id)
-
-    if not joined:
+    if not await is_user_subscribed(user_id):
         await message.reply_text(
-            "Please join our channel to use the bot.",
+            "📢 Please join our channel to use the bot.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join", url=f"https://t.me/{REQUIRED_CHANNEL}")],
-                [InlineKeyboardButton("Check", callback_data="check_join")]
+                [InlineKeyboardButton("Join Channel", url=CHANNEL_LINK)],
+                [InlineKeyboardButton("Check Subscription", callback_data="check_subscription")]
             ])
         )
         return
@@ -97,8 +96,7 @@ async def start_handler(client: Client, message: Message):
             "face_swaps_left": 2,
             "invites_sent": 0,
             "referrals": [],
-            "referral_link": f"https://t.me/{BOT_TOKEN.split(':')[0]}?start={user_id}",
-            "joined_channel": True  # Add channel join status
+            "referral_link": f"https://t.me/{BOT_TOKEN.split(':')[0]}?start={user_id}"
         }
         if referrer_id:
             user_doc["referrer"] = referrer_id
@@ -118,36 +116,15 @@ async def start_handler(client: Client, message: Message):
     else:
         await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
-@app.on_callback_query(filters.regex("^check_join$"))
-async def check_join_handler(client: Client, callback_query):
+@app.on_callback_query(filters.regex("check_subscription"))
+async def check_subscription_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
-    joined = await check_channel_join(user_id)
 
-    if joined:
-        # Update user document to confirm channel join
-        await users_col.update_one(
-            {"_id": user_id},
-            {"$set": {"joined_channel": True}}
-        )
+    if await is_user_subscribed(user_id):
         await callback_query.message.delete()
         await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
-        await callback_query.message.reply_text(
-            "You haven't joined the channel yet. Please join first.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join", url=f"https://t.me/{REQUIRED_CHANNEL}")],
-                [InlineKeyboardButton("Check", callback_data="check_join")]
-            ])
-        )
-
-@app.on_callback_query(filters.regex("^join_channel$"))
-async def join_channel_handler(client: Client, callback_query):
-    await callback_query.message.edit_reply_markup(
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Join", url=f"https://t.me/{REQUIRED_CHANNEL}")],
-            [InlineKeyboardButton("Check", callback_data="check_join")]
-        ])
-    )
+        await callback_query.answer("You have not joined the channel yet. Please join and try again.", show_alert=True)
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
