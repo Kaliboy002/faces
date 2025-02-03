@@ -157,16 +157,20 @@ async def button_handler(client: Client, callback_query):
 
     user_selections[user_id] = user_choice
 
-    if user_choice == "face_swap":
-        user = await users_col.find_one({"_id": user_id})
-        if user["face_swaps_left"] <= 0:
-            await callback_query.message.reply_text(
-                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your[...]
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back", callback_data="back")]
-                ])
-            )
-            return
+if user_choice == "face_swap":
+    user = await users_col.find_one({"_id": user_id})
+    if user["face_swaps_left"] <= 0:
+        await callback_query.message.reply_text(
+            f"❌ You've used all your free face swaps.\n\n"
+            f"Your referral link: {user['referral_link']}\n"
+            f"Face swaps left: {user['face_swaps_left']}\n"
+            f"Invites sent: {user['invites_sent']}\n"
+            f"Share your referral link to get more swaps!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+        return
 
         await callback_query.message.delete()
         await callback_query.message.reply_photo(
