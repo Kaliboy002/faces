@@ -72,22 +72,23 @@ async def is_user_member(client: Client, user_id: int, channel_id: int) -> bool:
     try:
         member = await client.get_chat_member(channel_id, user_id)
         return member.status in ["member", "administrator", "creator"]
-    except:
+    except Exception as e:
+        print(f"Error checking membership: {e}")
         return False
 
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
+    if not await is_user_member(client, user_id, CHANNEL_ID):
+        await message.reply_text(
+            "Please join our channel to use this bot. Click the button below to join and then click Verify.",
+            reply_markup=get_join_buttons()
+        )
+        return
+
     user = await users_col.find_one({"_id": user_id})
     if not user:
-        if not await is_user_member(client, user_id, CHANNEL_ID):
-            await message.reply_text(
-                "Please join our channel to use this bot. Click the button below to join and then click Verify.",
-                reply_markup=get_join_buttons()
-            )
-            return
-
         referrer_id = None
         args = message.text.split()
         if len(args) > 1 and args[1].isdigit():
@@ -176,7 +177,7 @@ async def button_handler(client: Client, callback_query):
 
     if user_choice == "face_swap":
         user = await users_col.find_one({"_id": user_id})
-        if user is None or user["face_swaps_left"] <= 0:
+        if user["face_swaps_left"] <= 0:
             await callback_query.message.reply_text(
                 f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
                 reply_markup=InlineKeyboardMarkup([
@@ -216,8 +217,7 @@ async def button_handler(client: Client, callback_query):
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
-    user = await users_col.find_one({"_id": user_id})
-    if not user or not await is_user_member(client, user_id, CHANNEL_ID):
+    if not await is_user_member(client, user_id, CHANNEL_ID):
         await message.reply_text(
             "Please join our channel to use this bot. Click the button below to join and then click Verify.",
             reply_markup=get_join_buttons()
@@ -250,7 +250,7 @@ async def handle_face_swap(client: Client, message: Message):
     user_state = user_data.get(user_id, {})
 
     user = await users_col.find_one({"_id": user_id})
-    if user is None or user["face_swaps_left"] <= 0:
+    if user["face_swaps_left"] <= 0:
         await message.reply_text(
             f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
             reply_markup=InlineKeyboardMarkup([
