@@ -29,14 +29,14 @@ BG_REMOVE_APIS = [
     "https://ar-api-08uk.onrender.com/remove?bg="
 ]
 ENHANCE_APIS = [
-    "https://ar-api-08uk.onrender.com/remini?url=",
+    "https://ar-api-08uk.onrender.comkk/remini?url=",
     "https://api.nyxs.pw/tools/hd?url="
 ]
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
     "Kaliboy0012/face-swapm",
-    "Jonny001fuck/Image-Face-Swap",
+    "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
 
@@ -186,10 +186,11 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
         return
 
+    if user_id in processing_users:
+        await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
+        return
+
     if user_choice == "face_swap":
-        if user_id in processing_users:
-            await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
-            return
         await handle_face_swap(client, message)
     else:
         processing_users.add(user_id)
