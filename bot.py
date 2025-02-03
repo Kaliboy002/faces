@@ -96,24 +96,6 @@ async def start_handler(client: Client, message: Message):
     else:
         await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
-@app.on_message(filters.text & ~filters.command(["start", "add"]))
-async def text_handler(client: Client, message: Message):
-    user_id = message.from_user.id
-    if user_id in user_data and "admin_step" in user_data[user_id]:
-        if user_data[user_id]["admin_step"] == "awaiting_user_id":
-            target_user_id = int(message.text)
-            await message.reply_text("How many face swaps would you like to add for this user?")
-            user_data[user_id] = {"admin_step": "awaiting_amount", "target_user_id": target_user_id}
-       elif user_data[user_id]["admin_step"] == "awaiting_amount":
-            amount = int(message.text)
-            target_user_id = user_data[user_id]["target_user_id"]
-            await users_col.update_one(
-                {"_id": target_user_id},
-                {"$inc": {"face_swaps_left": amount}}
-            )
-            await message.reply_text(f"Successfully added {amount} face swaps for user {target_user_id}.")
-            user_data.pop(user_id, None)
-
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
     user_choice = callback_query.data
@@ -130,11 +112,7 @@ async def button_handler(client: Client, callback_query):
         # Check face swap limit
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
-            referral_link = user["referral_link"]
-            invites_sent = user["invites_sent"]
-            await callback_query.message.reply_text(
-                f"❌ You've used all your free face swaps.\n\nYour referral link: {referral_link}\nYour invites sent: {invites_sent}\nCurrent face swaps: {user['face_swaps_left']}\n\nShare your referral link to get more face swaps!"
-            )
+            await callback_query.message.reply_text("❌ You've used all your free face swaps. Share your referral link to get more!")
             return
 
         user_data[user_id] = {"step": "awaiting_source"}
