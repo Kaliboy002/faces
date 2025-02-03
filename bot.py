@@ -44,6 +44,7 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 user_selections = {}
 user_data = {}
 processing_users = set()  # To track processing users
+admin_data = {}  # To track admin data
 
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -95,6 +96,29 @@ async def start_handler(client: Client, message: Message):
         await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
         await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
+
+@app.on_message(filters.command("add"))
+async def add_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    if user_id not in admin_data:
+        admin_data[user_id] = {"step": "awaiting_user_id"}
+        await message.reply_text("Please send the user ID to add face swap attempts.")
+    elif admin_data[user_id]["step"] == "awaiting_user_id":
+        try:
+            target_user_id = int(message.text)
+            admin_data[user_id].update({"step": "awaiting_amount", "target_user_id": target_user_id})
+            await message.reply_text("Please send the amount of face swap attempts to add.")
+        except ValueError:
+            await message.reply_text("Invalid user ID. Please send a valid user ID.")
+    elif admin_data[user_id]["step"] == "awaiting_amount":
+        try:
+            amount = int(message.text)
+            target_user_id = admin_data[user_id]["target_user_id"]
+            await users_col.update_one({"_id": target_user_id}, {"$inc": {"face_swaps_left": amount}})
+            await message.reply_text(f"Successfully added {amount} face swap attempts to user {target_user_id}.")
+            admin_data.pop(user_id, None)
+        except ValueError:
+            await message.reply_text("Invalid amount. Please send a valid number.")
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
