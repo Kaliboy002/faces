@@ -176,7 +176,7 @@ async def button_handler(client: Client, callback_query):
 
     if user_choice == "face_swap":
         user = await users_col.find_one({"_id": user_id})
-        if user["face_swaps_left"] <= 0:
+        if user is None or user["face_swaps_left"] <= 0:
             await callback_query.message.reply_text(
                 f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
                 reply_markup=InlineKeyboardMarkup([
@@ -250,7 +250,7 @@ async def handle_face_swap(client: Client, message: Message):
     user_state = user_data.get(user_id, {})
 
     user = await users_col.find_one({"_id": user_id})
-    if user["face_swaps_left"] <= 0:
+    if user is None or user["face_swaps_left"] <= 0:
         await message.reply_text(
             f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
             reply_markup=InlineKeyboardMarkup([
