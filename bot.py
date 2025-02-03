@@ -18,7 +18,7 @@ IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 ADMIN_CHAT_ID = 7046488481  # Replace with the actual admin chat ID
 
 # MongoDB connection
-MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"
+MONGO_URI = "mongodb+srv://Kali:SHM14002022SHM@cluster0.bxsct.mongodb.net/myDatabase?retryWrites=true&w=majority"
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 db = mongo_client.shah
 users_col = db.users
