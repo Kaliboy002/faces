@@ -165,9 +165,6 @@ async def button_handler(client: Client, callback_query):
             ])
         )
 
-# Rest of the code remains the same...
-
-
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
