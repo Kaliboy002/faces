@@ -78,19 +78,21 @@ async def is_user_member(client: Client, user_id: int, channel_id: int) -> bool:
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
-    if not await is_user_member(client, user_id, CHANNEL_ID):
-        await message.reply_text(
-            "Please join our channel to use this bot. Click the button below to join and then click Verify.",
-            reply_markup=get_join_buttons()
-        )
-        return
 
-    args = message.text.split()
     user = await users_col.find_one({"_id": user_id})
     if not user:
+        if not await is_user_member(client, user_id, CHANNEL_ID):
+            await message.reply_text(
+                "Please join our channel to use this bot. Click the button below to join and then click Verify.",
+                reply_markup=get_join_buttons()
+            )
+            return
+
         referrer_id = None
+        args = message.text.split()
         if len(args) > 1 and args[1].isdigit():
             referrer_id = int(args[1])
+        
         user_doc = {
             "_id": user_id,
             "name": message.from_user.first_name,
@@ -99,6 +101,7 @@ async def start_handler(client: Client, message: Message):
             "referrals": [],
             "referral_link": f"https://t.me/{BOT_TOKEN.split(':')[0]}?start={user_id}"
         }
+
         if referrer_id:
             user_doc["referrer"] = referrer_id
             await users_col.update_one(
@@ -213,7 +216,8 @@ async def button_handler(client: Client, callback_query):
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
-    if not await is_user_member(client, user_id, CHANNEL_ID):
+    user = await users_col.find_one({"_id": user_id})
+    if not user or not await is_user_member(client, user_id, CHANNEL_ID):
         await message.reply_text(
             "Please join our channel to use this bot. Click the button below to join and then click Verify.",
             reply_markup=get_join_buttons()
