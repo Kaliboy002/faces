@@ -23,10 +23,6 @@ mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 db = mongo_client.shah
 users_col = db.users
 
-# Channel Information
-CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with your channel username
-CHANNEL_LINK = f"https://t.me/{CHANNEL_USERNAME}"
-
 # API endpoints
 BG_REMOVE_APIS = [
     "https://for-free.serv00.net/ai-removebg.php?image=",
@@ -62,28 +58,10 @@ def get_main_buttons():
         [InlineKeyboardButton("👤 Face Swap", callback_data="face_swap")]
     ])
 
-async def is_user_subscribed(user_id):
-    try:
-        chat_member = await app.get_chat_member(CHANNEL_USERNAME, user_id)
-        return chat_member.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        print(f"Error checking subscription: {e}")
-        return False
-
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
-
-    if not await is_user_subscribed(user_id):
-        await message.reply_text(
-            "📢 Please join our channel to use the bot.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join Channel", url=CHANNEL_LINK)],
-                [InlineKeyboardButton("Check Subscription", callback_data="check_subscription")]
-            ])
-        )
-        return
 
     user = await users_col.find_one({"_id": user_id})
     if not user:
@@ -115,16 +93,6 @@ async def start_handler(client: Client, message: Message):
         await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
         await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
-
-@app.on_callback_query(filters.regex("check_subscription"))
-async def check_subscription_handler(client: Client, callback_query):
-    user_id = callback_query.from_user.id
-
-    if await is_user_subscribed(user_id):
-        await callback_query.message.delete()
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
-    else:
-        await callback_query.answer("You have not joined the channel yet. Please join and try again.", show_alert=True)
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
