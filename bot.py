@@ -6,7 +6,6 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, file
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 
 # MongoDB connection
 MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"
@@ -97,6 +96,15 @@ async def button_handler(client: Client, callback_query):
     user_selections[user_id] = user_choice
 
     if user_choice == "face_swap":
+        # Check face swap count
+        user = users_collection.find_one({"user_id": user_id})
+        if user["face_swap_count"] <= 0:
+            await callback_query.message.reply_text(
+                "❌ You've used all your free face swaps.\n"
+                f"🔗 Invite friends using your referral link to get more chances: {user['referral_link']}\n"
+                f"👥 Users invited: {user['referral_count']}"
+            )
+            return
         user_data[user_id] = {"step": "awaiting_source"}
         await callback_query.message.delete()
         await callback_query.message.reply_text("📷 Send the source image (face to swap).")
@@ -128,15 +136,6 @@ async def photo_handler(client: Client, message: Message):
         return
 
     if user_choice == "face_swap":
-        # Check face swap count
-        user = users_collection.find_one({"user_id": user_id})
-        if user["face_swap_count"] <= 0:
-            await message.reply_text(
-                "❌ You've used all your free face swaps.\n"
-                f"🔗 Invite friends using your referral link to get more chances: {user['referral_link']}\n"
-                f"👥 Users invited: {user['referral_count']}"
-            )
-            return
         await handle_face_swap(client, message)
     else:
         api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
