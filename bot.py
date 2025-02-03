@@ -29,7 +29,7 @@ BG_REMOVE_APIS = [
     "https://ar-api-08uk.onrender.com/Ttremove?bg="
 ]
 ENHANCE_APIS = [
-    "https://ar-api-08uk.onrender.com/remini?url=",
+    "https://ar-api-08uk.onrender.comtt/remini?url=",
     "https://api.nyxs.pw/tools/hd?url="
 ]
 
