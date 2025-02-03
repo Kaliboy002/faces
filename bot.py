@@ -51,7 +51,6 @@ processing_users = set()  # To track processing users
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
 
-# Send selection buttons
 def get_main_buttons():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🖼 Remove Background", callback_data="remove_bg")],
@@ -64,10 +63,8 @@ async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
 
-    # Check if user is new
     user = await users_col.find_one({"_id": user_id})
     if not user:
-        # Create new user document
         referrer_id = None
         if len(args) > 1 and args[1].isdigit():
             referrer_id = int(args[1])
@@ -81,12 +78,10 @@ async def start_handler(client: Client, message: Message):
         }
         if referrer_id:
             user_doc["referrer"] = referrer_id
-            # Update referrer's face swaps and invites_sent
             await users_col.update_one(
                 {"_id": referrer_id},
                 {"$inc": {"face_swaps_left": 1, "invites_sent": 1}}
             )
-            # Notify referrer
             try:
                 await app.send_message(
                     referrer_id,
@@ -102,7 +97,6 @@ async def start_handler(client: Client, message: Message):
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
     try:
-        # Extract user ID and amount from the command
         args = message.text.split()
         if len(args) != 3:
             await message.reply_text("❌ Invalid format. Use: /add <user_id> <amount>")
@@ -111,7 +105,6 @@ async def add_handler(client: Client, message: Message):
         target_user_id = int(args[1])
         amount = int(args[2])
 
-        # Update the user's face swap attempts
         result = await users_col.update_one(
             {"_id": target_user_id},
             {"$inc": {"face_swaps_left": amount}}
@@ -132,25 +125,23 @@ async def button_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
     if user_choice == "back":
-        # Send the main menu without deleting the processed photo message
+        await callback_query.message.delete()
         await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
     user_selections[user_id] = user_choice
 
     if user_choice == "face_swap":
-        # Check face swap limit
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
             await callback_query.message.reply_text(
-                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!",
+                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="back")]
                 ])
             )
             return
 
-        # Send photo with caption and back button
         await callback_query.message.delete()
         await callback_query.message.reply_photo(
             "https://i.imghippo.com/files/iDxy5739tZs.jpg",
@@ -187,8 +178,7 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
         return
 
-    # Allow Background Remove and Enhance while Face Swap is processing
-    if user_choice != "face_swap" and user_id in processing_users:
+    if user_id in processing_users:
         await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
         return
 
@@ -207,11 +197,10 @@ async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
     user_state = user_data.get(user_id, {})
 
-    # Check if user has face swaps left
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
         await message.reply_text(
-            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps!",
+            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
@@ -219,16 +208,15 @@ async def handle_face_swap(client: Client, message: Message):
         return
 
     if user_state.get("step") == "awaiting_source":
-        # Save source photo
         source_path = await download_photo(client, message)
         user_data[user_id] = {"step": "awaiting_target", "source_path": source_path}
         await message.reply_text("📷 Now send the target image (destination face).")
     elif user_state.get("step") == "awaiting_target":
-        # Save target photo
         target_path = await download_photo(client, message)
         user_data[user_id]["target_path"] = target_path
 
-        # Perform face swap in a separate thread to avoid blocking
+        await message.reply_text("🔄 Processing photo, please wait...")
+
         try:
             swapped_image_path = await asyncio.to_thread(
                 perform_face_swap, user_data[user_id]["source_path"], user_data[user_id]["target_path"]
@@ -241,7 +229,6 @@ async def handle_face_swap(client: Client, message: Message):
                         [InlineKeyboardButton("🔙 Back", callback_data="back")]
                     ])
                 )
-                # Decrease face swaps left
                 await users_col.update_one(
                     {"_id": user_id},
                     {"$inc": {"face_swaps_left": -1}}
@@ -252,7 +239,6 @@ async def handle_face_swap(client: Client, message: Message):
             print(f"Face swap error: {e}")
             await message.reply_text("❌ An error occurred during face swap. Please try again.")
 
-        # Cleanup
         cleanup_files(user_id)
         user_data.pop(user_id, None)
 
@@ -283,9 +269,8 @@ async def process_photo(client: Client, message: Message, api_list):
     except Exception as e:
         print(f"Error: {e}")
         await message.reply_text("❌ An error occurred. Try again.")
-
     finally:
-        os.remove(temp_path)  # Cleanup temp file
+        os.remove(temp_path)
 
 async def download_photo(client: Client, message: Message):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
