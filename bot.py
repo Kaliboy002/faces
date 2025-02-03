@@ -17,6 +17,10 @@ IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 # Admin chat ID
 ADMIN_CHAT_ID = 7046488481  # Replace with the actual admin chat ID
 
+# Channel ID to check membership
+CHANNEL_ID = -1002069323367  # Replace with your channel ID
+CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with your channel username
+
 # MongoDB connection
 MONGO_URI = "mongodb+srv://Kali:SHM14002022SHM@cluster0.bxsct.mongodb.net/myDatabase?retryWrites=true&w=majority"
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
@@ -58,11 +62,30 @@ def get_main_buttons():
         [InlineKeyboardButton("👤 Face Swap", callback_data="face_swap")]
     ])
 
+def get_join_buttons():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+        [InlineKeyboardButton("Verify Membership", callback_data="verify_membership")]
+    ])
+
+async def is_user_member(client: Client, user_id: int, channel_id: int) -> bool:
+    try:
+        member = await client.get_chat_member(channel_id, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except:
+        return False
+
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
-    args = message.text.split()
+    if not await is_user_member(client, user_id, CHANNEL_ID):
+        await message.reply_text(
+            "Please join our channel to use this bot. Click the button below to join and then click Verify.",
+            reply_markup=get_join_buttons()
+        )
+        return
 
+    args = message.text.split()
     user = await users_col.find_one({"_id": user_id})
     if not user:
         referrer_id = None
@@ -132,7 +155,13 @@ async def button_handler(client: Client, callback_query):
     user_choice = callback_query.data
     user_id = callback_query.from_user.id
 
-    if user_choice == "back":
+    if user_choice == "verify_membership":
+        if await is_user_member(client, user_id, CHANNEL_ID):
+            await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        else:
+            await callback_query.answer("You are not joined. Please join the channel first.", show_alert=True)
+        return
+    elif user_choice == "back":
         await callback_query.message.delete()
         await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
@@ -183,6 +212,14 @@ async def button_handler(client: Client, callback_query):
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
+
+    if not await is_user_member(client, user_id, CHANNEL_ID):
+        await message.reply_text(
+            "Please join our channel to use this bot. Click the button below to join and then click Verify.",
+            reply_markup=get_join_buttons()
+        )
+        return
+
     user_choice = user_selections.get(user_id)
 
     if not user_choice:
