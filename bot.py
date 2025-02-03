@@ -147,9 +147,16 @@ async def button_handler(client: Client, callback_query):
             )
             return
 
-        user_data[user_id] = {"step": "awaiting_source"}
+        # Send photo with caption and back button
         await callback_query.message.delete()
-        await callback_query.message.reply_text("📷 Send the source image (face to swap).")
+        await callback_query.message.reply_photo(
+            "https://i.imghippo.com/files/iDxy5739tZs.jpg",
+            caption="📷 Send the source image (face to swap).",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+        user_data[user_id] = {"step": "awaiting_source"}
     else:
         image_url = (
             "https://i.imghippo.com/files/eNXe4934iU.jpg" if user_choice == "remove_bg"
@@ -177,20 +184,21 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
         return
 
-    if user_id in processing_users:
+    # Allow Background Remove and Enhance while Face Swap is processing
+    if user_choice != "face_swap" and user_id in processing_users:
         await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
         return
 
-    processing_users.add(user_id)
-    try:
-        await message.reply_text("🔄 Processing photo, please wait...")
-        if user_choice == "face_swap":
-            await handle_face_swap(client, message)
-        else:
+    if user_choice == "face_swap":
+        await handle_face_swap(client, message)
+    else:
+        processing_users.add(user_id)
+        try:
+            await message.reply_text("🔄 Processing photo, please wait...")
             api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
             await process_photo(client, message, api_list)
-    finally:
-        processing_users.remove(user_id)
+        finally:
+            processing_users.remove(user_id)
 
 async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
@@ -213,7 +221,6 @@ async def handle_face_swap(client: Client, message: Message):
         # Save target photo
         target_path = await download_photo(client, message)
         user_data[user_id]["target_path"] = target_path
-        await message.reply_text("🔄 Processing face swap, please wait...")
 
         # Perform face swap in a separate thread to avoid blocking
         try:
