@@ -96,14 +96,7 @@ async def start_handler(client: Client, message: Message):
     else:
         await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
-@app.on_message(filters.command("add", prefixes="/"))
-async def add_face_swaps_handler(client: Client, message: Message):
-    if message.from_user.id != 7046488481:  # Replace with your admin ID
-        return
-    await message.reply_text("Please send the user ID you want to add face swaps for.")
-    user_data[message.from_user.id] = {"admin_step": "awaiting_user_id"}
-
-@app.on_message(filters.text & ~filters.command())
+@app.on_message(filters.text & ~filters.command(["start", "add"]))
 async def text_handler(client: Client, message: Message):
     user_id = message.from_user.id
     if user_id in user_data and "admin_step" in user_data[user_id]:
@@ -111,7 +104,7 @@ async def text_handler(client: Client, message: Message):
             target_user_id = int(message.text)
             await message.reply_text("How many face swaps would you like to add for this user?")
             user_data[user_id] = {"admin_step": "awaiting_amount", "target_user_id": target_user_id}
-        elif user_data[user_id]["admin_step"] == "awaiting_amount":
+       elif user_data[user_id]["admin_step"] == "awaiting_amount":
             amount = int(message.text)
             target_user_id = user_data[user_id]["target_user_id"]
             await users_col.update_one(
