@@ -103,7 +103,7 @@ async def add_face_swaps_handler(client: Client, message: Message):
     await message.reply_text("Please send the user ID you want to add face swaps for.")
     user_data[message.from_user.id] = {"admin_step": "awaiting_user_id"}
 
-@app.on_message(filters.text & ~filters.command)
+@app.on_message(filters.text & ~filters.command())
 async def text_handler(client: Client, message: Message):
     user_id = message.from_user.id
     if user_id in user_data and "admin_step" in user_data[user_id]:
