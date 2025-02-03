@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 # Bot credentials
 API_ID = 15787995
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
-BOT_TOKEN = "7844051995:AAHqeWncuLftLXDHIMafOH_bkl3zGxkIbGg"
+BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
 IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 
 # Admin chat ID
@@ -24,7 +24,7 @@ db = mongo_client.shah
 users_col = db.users
 
 # Mandatory channel details
-MANDATORY_CHANNEL = "Kali_Linux_BOTS"  # Replace with your channel username
+MANDATORY_CHANNEL = "your_channel_username"  # Replace with your channel username
 CHANNEL_LINK = f"https://t.me/{MANDATORY_CHANNEL}"
 
 # API endpoints
@@ -218,17 +218,6 @@ async def button_handler(client: Client, callback_query):
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
-
-    if not await check_user_in_channel(user_id):
-        await message.reply_text(
-            f"⚠️ To use this bot, you must join our channel first:\n\n{CHANNEL_LINK}\n\n"
-            "After joining, click the button below to verify.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Verify Join", callback_data="verify_join")]
-            ])
-        )
-        return
-
     user_choice = user_selections.get(user_id)
 
     if not user_choice:
