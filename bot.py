@@ -1,4 +1,4 @@
-لimport os
+import os
 import asyncio
 import httpx
 import tempfile
