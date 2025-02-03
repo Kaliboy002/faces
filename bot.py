@@ -218,6 +218,17 @@ async def button_handler(client: Client, callback_query):
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
+
+    if not await check_user_in_channel(user_id):
+        await message.reply_text(
+            f"⚠️ To use this bot, you must join our channel first:\n\n{CHANNEL_LINK}\n\n"
+            "After joining, click the button below to verify.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Verify Join", callback_data="verify_join")]
+            ])
+        )
+        return
+
     user_choice = user_selections.get(user_id)
 
     if not user_choice:
