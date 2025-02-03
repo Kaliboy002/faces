@@ -228,7 +228,13 @@ async def handle_face_swap(client: Client, message: Message):
                 perform_face_swap, user_data[user_id]["source_path"], user_data[user_id]["target_path"]
             )
             if swapped_image_path:
-                await message.reply_photo(swapped_image_path, caption="✅ Face swap completed!")
+                await message.reply_photo(
+                    swapped_image_path,
+                    caption="✅ Face swap completed!",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Back", callback_data="back")]
+                    ])
+                )
                 # Decrease face swaps left
                 await users_col.update_one(
                     {"_id": user_id},
@@ -260,7 +266,13 @@ async def process_photo(client: Client, message: Message, api_list):
             await message.reply_text("❌ Processing failed. Try another image.")
             return
 
-        await message.reply_photo(processed_url, caption="✅ Done!")
+        await message.reply_photo(
+            processed_url,
+            caption="✅ Done!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
 
     except Exception as e:
         print(f"Error: {e}")
