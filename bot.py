@@ -7,6 +7,8 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, file
 from concurrent.futures import ThreadPoolExecutor
+import requests
+import json
 
 # Bot credentials
 API_ID = 15787995
@@ -55,6 +57,16 @@ processing_users = set()  # To track processing users
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
 
+LANGUAGE_TEXTS = {
+    "en": {
+        "welcome": "Welcome! Choose an option:",
+        "join_channel": "⚠️<b><i> To use this bot, you must first join our Telegram channel</i></b>\n\nAfter successfully joining, click the 🔐𝗝𝗼𝗶𝗻𝗲𝗱 button to confirm your bot membership and to continue",
+        "verify_join": "🔐𝗝𝗼𝗶𝗻𝗲𝗱",
+        "join_channel_btn": "Jᴏɪɴ ᴄʜᴀɴɴᴇʟ⚡️",
+        "not_joined": "🤨 You are not a member of our channel. Please join and try again."
+    }
+}
+
 def get_main_buttons():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🖼 Remove Background", callback_data="remove_bg")],
@@ -68,21 +80,28 @@ def get_join_buttons():
         [InlineKeyboardButton("Verify Membership", callback_data="verify_membership")]
     ])
 
-async def is_user_member(client: Client, user_id: int, channel_id: int) -> bool:
-    try:
-        member = await client.get_chat_member(channel_id, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        print(f"Error checking membership: {e}")
-        return False
+async def CHECK_JOIN_MEMBER(user_id: int, channels: list, api_key: str):
+    states = ['administrator', 'creator', 'member', 'restricted']
+    for channel in channels:
+        try:
+            api_url = f"https://api.telegram.org/bot{api_key}/getChatMember?chat_id=@{channel}&user_id={user_id}"
+            response = requests.get(api_url).json()
+            if response.get('ok') and response['result']['status'] in states:
+                continue
+            else:
+                return False, channel
+        except Exception as e:
+            print(f"Error checking membership: {e}")
+            return False, channel
+    return True, None
 
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
-    if not await is_user_member(client, user_id, CHANNEL_ID):
+    if not await CHECK_JOIN_MEMBER(user_id, [CHANNEL_USERNAME], BOT_TOKEN):
         await message.reply_text(
-            "Please join our channel to use this bot. Click the button below to join and then click Verify.",
+            LANGUAGE_TEXTS["en"]["join_channel"],
             reply_markup=get_join_buttons()
         )
         return
@@ -117,9 +136,9 @@ async def start_handler(client: Client, message: Message):
             except:
                 pass
         await users_col.insert_one(user_doc)
-        await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await message.reply_text(LANGUAGE_TEXTS["en"]["welcome"], reply_markup=get_main_buttons())
     else:
-        await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
+        await message.reply_text(LANGUAGE_TEXTS["en"]["welcome"], reply_markup=get_main_buttons())
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
@@ -160,17 +179,17 @@ async def button_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
     if user_choice == "verify_membership":
-        if await is_user_member(client, user_id, CHANNEL_ID):
-            await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        if await CHECK_JOIN_MEMBER(user_id, [CHANNEL_USERNAME], BOT_TOKEN):
+            await callback_query.message.reply_text(LANGUAGE_TEXTS["en"]["welcome"], reply_markup=get_main_buttons())
         else:
-            await callback_query.answer("You are not joined. Please join the channel first.", show_alert=True)
+            await callback_query.answer(LANGUAGE_TEXTS["en"]["not_joined"], show_alert=True)
         return
     elif user_choice == "back":
         await callback_query.message.delete()
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text(LANGUAGE_TEXTS["en"]["welcome"], reply_markup=get_main_buttons())
         return
     elif user_choice == "processed_back":
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text(LANGUAGE_TEXTS["en"]["welcome"], reply_markup=get_main_buttons())
         return
 
     user_selections[user_id] = user_choice
@@ -217,9 +236,9 @@ async def button_handler(client: Client, callback_query):
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
-    if not await is_user_member(client, user_id, CHANNEL_ID):
+    if not await CHECK_JOIN_MEMBER(user_id, [CHANNEL_USERNAME], BOT_TOKEN):
         await message.reply_text(
-            "Please join our channel to use this bot. Click the button below to join and then click Verify.",
+            LANGUAGE_TEXTS["en"]["join_channel"],
             reply_markup=get_join_buttons()
         )
         return
