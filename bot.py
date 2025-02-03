@@ -26,10 +26,10 @@ users_col = db.users
 # API endpoints
 BG_REMOVE_APIS = [
     "https://for-free.serv00.net/ai-removebg.php?image=",
-    "https://ar-api-08uk.onrender.com/remove?bg="
+    "https://ar-api-08uk.onrender.com/Ttremove?bg="
 ]
 ENHANCE_APIS = [
-    "https://ar-api-08uk.onrender.comkk/remini?url=",
+    "https://ar-api-08uk.onrender.com/remini?url=",
     "https://api.nyxs.pw/tools/hd?url="
 ]
 
@@ -273,7 +273,7 @@ async def process_photo(client: Client, message: Message, api_list):
             processed_url,
             caption="✅ Done!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+                [InlineKeyboardButton("🔙 Back", callback_data="processed_back")]
             ])
         )
 
@@ -329,6 +329,8 @@ async def process_image(image_url, api_list):
                     data = response.json()
                     if data.get("status") == "success" or data.get("status") == 200:
                         return data["results"][0]["image"] if "results" in data else data["result"]
+                    elif data.get("status") is True and "result" in data:
+                        return data["result"]
             except:
                 continue
     return None
