@@ -14,6 +14,9 @@ API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7844051995:AAHqeWncuLftLXDHIMafOH_bkl3zGxkIbGg"
 IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 
+# Admin chat ID
+ADMIN_CHAT_ID = 7046488481  # Replace with the actual admin chat ID
+
 # MongoDB connection
 MONGO_URI = "mongodb+srv://mrshokrullah:L7yjtsOjHzGBhaSR@cluster0.aqxyz.mongodb.net/shah?retryWrites=true&w=majority&appName=Cluster0"
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
@@ -44,7 +47,7 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 user_selections = {}
 user_data = {}
 processing_users = set()  # To track processing users
-admin_data = {}  # To track admin data
+admin_data = {}  # To track admin interactions
 
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -97,7 +100,7 @@ async def start_handler(client: Client, message: Message):
     else:
         await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
-@app.on_message(filters.command("add"))
+@app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
     user_id = message.from_user.id
     if user_id not in admin_data:
