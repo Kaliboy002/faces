@@ -25,19 +25,19 @@ users_col = db.users
 
 # API endpoints
 BG_REMOVE_APIS = [
-    "https://for-free.serv00.net/ai-removebg.php?image=",
+    "https://for-free.serv00.net/DDai-removebg.php?image=",
     "https://ar-api-08uk.onrender.com/Ttremove?bg="
 ]
 ENHANCE_APIS = [
-    "https://ar-api-08uk.onrender.comtt/remini?url=",
+    "https://FUCKar-api-08uk.onrender.comtt/remFICKini?url=",
     "https://api.nyxs.pw/tools/hd?url="
 ]
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
     "Kaliboy0012/face-swapm",
-    "Jonny001/Image-Face-Swap",
-    "ovi054/face-swap-pro"
+    "Jonny001FUCK/Image-Face-Swap",
+    "ovi054FUCK/face-swap-pro"
 ]
 
 # Initialize Pyrogram bot
