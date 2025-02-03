@@ -24,7 +24,7 @@ db = mongo_client.shah
 users_col = db.users
 
 # Mandatory channel details
-MANDATORY_CHANNEL = "Kali_Linux_BOTS"  # Replace with your channel username
+MANDATORY_CHANNEL = "shmshahs"  # Replace with your channel username
 CHANNEL_LINK = f"https://t.me/{MANDATORY_CHANNEL}"
 
 # API endpoints
