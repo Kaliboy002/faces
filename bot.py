@@ -77,13 +77,53 @@ async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
 
-    # Fake mandatory join message
-    join_message = "To use this bot, you must join our channel."
-    join_button = InlineKeyboardButton("Join", url="https://t.me/Kali_Linux_BOTS")
-    check_button = InlineKeyboardButton("Check", callback_data='check_join')
-    join_markup = InlineKeyboardMarkup([[join_button], [check_button]])
-    
-    await message.reply_text(join_message, reply_markup=join_markup)
+    # Parse referrer ID from the start command
+    referrer_id = None
+    if len(args) > 1 and args[1].isdigit():
+        referrer_id = int(args[1])
+        print(f"Referrer ID detected: {referrer_id}")
+
+    # Check if the user already exists
+    user = await users_col.find_one({"_id": user_id})
+    if not user:
+        # Create new user document
+        user_doc = {
+            "_id": user_id,
+            "name": message.from_user.first_name,
+            "face_swaps_left": 2,
+            "invites_sent": 0,
+            "referrals": [],
+            "referral_link": f"https://t.me/{BOT_TOKEN.split(':')[0]}?start={user_id}"
+        }
+        if referrer_id:
+            user_doc["referrer"] = referrer_id
+            # Update referrer's data
+            await users_col.update_one(
+                {"_id": referrer_id},
+                {"$inc": {"face_swaps_left": 1, "invites_sent": 1}}
+            )
+            await users_col.update_one(
+                {"_id": referrer_id},
+                {"$push": {"referrals": user_id}}
+            )
+            print(f"Updated referrer {referrer_id} with new face swap and invite count.")
+
+            # Send notification to referrer
+            try:
+                await app.send_message(
+                    referrer_id,
+                    f"🎉 User {message.from_user.first_name} started the bot using your referral link! You've received 1 additional face swap."
+                )
+                print(f"Notification sent to referrer {referrer_id}.")
+            except Exception as e:
+                print(f"Failed to send notification to referrer {referrer_id}: {e}")
+
+        # Insert new user document
+        await users_col.insert_one(user_doc)
+        print(f"Inserted new user {user_id}.")
+
+    # Show main menu
+    await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_callback_query(filters.regex("check_join"))
 async def check_join_handler(client: Client, callback_query):
@@ -375,6 +415,7 @@ async def download_photo(client: Client, message: Message):
         temp_path = temp_file.name
     await message.download(temp_path)
     return temp_path
+
 
 def perform_face_swap(source_path, target_path):
     for api_name in FACE_SWAP_APIS:
