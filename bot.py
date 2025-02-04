@@ -35,8 +35,8 @@ ENHANCE_APIS = [
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
-    "Kaliboy002/face-swapm",
-    "Jonny001FUCK/Image-Face-Swap",
+    "Kaliboy0012/face-swapm",
+    "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
 
@@ -47,6 +47,7 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 user_selections = {}
 user_data = {}
 processing_users = set()  # To track processing users
+processing_face_swaps = set()  # To track face swap processing users
 
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -63,14 +64,29 @@ async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     args = message.text.split()
 
+    # Fake mandatory join message
+    join_message = "To use this bot, you must join our channel."
+    join_button = InlineKeyboardButton("Join", url="https://t.me/Kali_Linux_BOTS")
+    check_button = InlineKeyboardButton("Check", callback_data='check_join')
+    join_markup = InlineKeyboardMarkup([[join_button], [check_button]])
+    
+    await message.reply_text(join_message, reply_markup=join_markup)
+
+@app.on_callback_query(filters.regex("check_join"))
+async def check_join_handler(client: Client, callback_query):
+    user_id = callback_query.from_user.id
+
+    await callback_query.message.delete()
+    
+    # After checking, show the main menu
     user = await users_col.find_one({"_id": user_id})
     if not user:
         referrer_id = None
-        if len(args) > 1 and args[1].isdigit():
-            referrer_id = int(args[1])
+        if len(callback_query.message.text.split()) > 1 and callback_query.message.text.split()[1].isdigit():
+            referrer_id = int(callback_query.message.text.split()[1])
         user_doc = {
             "_id": user_id,
-            "name": message.from_user.first_name,
+            "name": callback_query.from_user.first_name,
             "face_swaps_left": 2,
             "invites_sent": 0,
             "referrals": [],
@@ -85,14 +101,14 @@ async def start_handler(client: Client, message: Message):
             try:
                 await app.send_message(
                     referrer_id,
-                    f"🎉 User {message.from_user.first_name} started the bot using your referral link! You've received 1 additional face swap."
+                    f"🎉 User {callback_query.from_user.first_name} started the bot using your referral link! You've received 1 additional face swap."
                 )
             except:
                 pass
         await users_col.insert_one(user_doc)
-        await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
-        await message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
@@ -136,6 +152,9 @@ async def button_handler(client: Client, callback_query):
         await callback_query.message.delete()
         await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
+    elif user_choice == "processed_back":
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        return
 
     user_selections[user_id] = user_choice
 
@@ -143,7 +162,11 @@ async def button_handler(client: Client, callback_query):
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
             await callback_query.message.reply_text(
-                f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
+                f"❌ You've used all your free face swaps.\n\n"
+                f"Your referral link: {user['referral_link']}\n"
+                f"Face swaps left: {user['face_swaps_left']}\n"
+                f"Invites sent: {user['invites_sent']}\n"
+                f"Share your referral link to get more swaps!",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="back")]
                 ])
@@ -186,13 +209,17 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
         return
 
-    if user_id in processing_users:
-        await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
-        return
-
     if user_choice == "face_swap":
+        if user_id in processing_face_swaps:
+            await message.reply_text("❌ Your face swap is already being processed. Please wait and try again later.")
+            return
+        processing_face_swaps.add(user_id)
         await handle_face_swap(client, message)
+        processing_face_swaps.remove(user_id)
     else:
+        if user_id in processing_users:
+            await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
+            return
         processing_users.add(user_id)
         try:
             await message.reply_text("🔄 Processing photo, please wait...")
@@ -208,7 +235,11 @@ async def handle_face_swap(client: Client, message: Message):
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
         await message.reply_text(
-            f"❌ You've used all your free face swaps.\n\nYour referral link: {user['referral_link']}\nFace swaps left: {user['face_swaps_left']}\nInvites sent: {user['invites_sent']}\nShare your referral link to get more face swaps.",
+            f"❌ You've used all your free face swaps.\n\n"
+            f"Your referral link: {user['referral_link']}\n"
+            f"Face swaps left: {user['face_swaps_left']}\n"
+            f"Invites sent: {user['invites_sent']}\n"
+            f"Share your referral link to get more swaps!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
@@ -223,7 +254,6 @@ async def handle_face_swap(client: Client, message: Message):
         target_path = await download_photo(client, message)
         user_data[user_id]["target_path"] = target_path
 
-        processing_users.add(user_id)
         await message.reply_text("🔄 Processing photo, please wait...")
 
         try:
@@ -235,7 +265,7 @@ async def handle_face_swap(client: Client, message: Message):
                     swapped_image_path,
                     caption="✅ Face swap completed!",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 Back", callback_data="back")]
+                        [InlineKeyboardButton("🔙 Back", callback_data="processed_back")]
                     ])
                 )
                 await users_col.update_one(
@@ -248,10 +278,8 @@ async def handle_face_swap(client: Client, message: Message):
             print(f"Face swap error: {e}")
             await message.reply_text("❌ An error occurred during face swap. Please try again.")
         finally:
-            processing_users.remove(user_id)
-
-        cleanup_files(user_id)
-        user_data.pop(user_id, None)
+            cleanup_files(user_id)
+            user_data.pop(user_id, None)
 
 async def process_photo(client: Client, message: Message, api_list):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
