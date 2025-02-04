@@ -5,7 +5,7 @@ import tempfile
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from gradio_client import Client as GradioClient, handle_file
+from gradio_client import Client as GradioClient, file, handle_file
 from concurrent.futures import ThreadPoolExecutor
 
 # Bot credentials
@@ -36,6 +36,7 @@ FACE_ENHANCE_API = "byondxr/finegrain-image-enhancer"
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
+    "Kaliboy0012/face-swapm",
     "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
@@ -239,10 +240,12 @@ async def photo_handler(client: Client, message: Message):
             await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
             return
         processing_users.add(user_id)
-        await message.reply_text("🔄 Processing photo, please wait...")
-        api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
-        await process_photo(client, message, api_list)
-        processing_users.remove(user_id)
+        try:
+            await message.reply_text("🔄 Processing photo, please wait...")
+            api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
+            await process_photo(client, message, api_list)
+        finally:
+            processing_users.remove(user_id)
 
 async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
@@ -370,12 +373,12 @@ def perform_face_swap(source_path, target_path):
         try:
             client = GradioClient(api_name)
             result = client.predict(
-                input_image=handle_file(source_path),
-                target_image=handle_file(target_path),
+                source_file=file(source_path),
+                target_file=file(target_path),
+                doFaceEnhancer=True,
                 api_name="/predict"
             )
-            enhanced_image_path = result[1]
-            return enhanced_image_path
+            return result
         except Exception as e:
             print(f"Face swap API {api_name} failed: {e}")
     return None
