@@ -20,7 +20,7 @@ ADMIN_CHAT_ID = 7046488481  # Replace with the actual admin chat ID
 # MongoDB connection
 MONGO_URI = "mongodb+srv://Kali:SHM14002022SHM@cluster0.bxsct.mongodb.net/myDatabase?retryWrites=true&w=majority"
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
-db = mongo_client.shah
+db = mongo_client.shahs
 users_col = db.users
 
 # API endpoints
