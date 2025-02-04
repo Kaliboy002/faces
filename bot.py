@@ -146,7 +146,7 @@ async def add_handler(client: Client, message: Message):
     except ValueError:
         await message.reply_text("❌ Invalid input. User ID and amount must be numbers.")
     except Exception as e:
-        await message.reply_text(f"❌ An error occurred: {e}")
+        await message.reply_text("❌ An error occurred: {e}")
 
 @app.on_message(filters.command("reset") & filters.user(ADMIN_CHAT_ID))
 async def reset_handler(client: Client, message: Message):
@@ -236,28 +236,17 @@ async def photo_handler(client: Client, message: Message):
             await message.reply_text("❌ Your face swap is already being processed. Please wait and try again later.")
             return
         processing_face_swaps.add(user_id)
-        await message.reply_text("📷 Send the target image (destination face).")
+        await handle_face_swap(client, message)
+        processing_face_swaps.remove(user_id)
     elif user_choice == "ai_face_edit":
-        if user_id in processing_users:
-            await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
-            return
-        processing_users.add(user_id)
         await message.reply_text("🔄 Processing photo, please wait...")
         await process_ai_face_edit(client, message)
-        processing_users.remove(user_id)
     else:
-        if user_id in processing_users:
-            await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
-            return
-        processing_users.add(user_id)
-        try:
-            await message.reply_text("🔄 Processing photo, please wait...")
-            api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
-            await process_photo(client, message, api_list)
-        finally:
-            processing_users.remove(user_id)
+        await message.reply_text("🔄 Processing photo, please wait...")
+        api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
+        await process_photo(client, message, api_list)
 
-async def process_face_swap(client: Client, message: Message):
+async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
     user_state = user_data.get(user_id, {})
 
@@ -282,6 +271,8 @@ async def process_face_swap(client: Client, message: Message):
     elif user_state.get("step") == "awaiting_target":
         target_path = await download_photo(client, message)
         user_data[user_id]["target_path"] = target_path
+
+        await message.reply_text("🔄 Processing face swap photo, please wait...")
 
         try:
             swapped_image_path = await asyncio.to_thread(
