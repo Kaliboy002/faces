@@ -36,7 +36,6 @@ FACE_ENHANCE_API = "byondxr/finegrain-image-enhancer"
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
-    "Kaliboy0012/face-swapm",
     "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
@@ -371,12 +370,12 @@ def perform_face_swap(source_path, target_path):
         try:
             client = GradioClient(api_name)
             result = client.predict(
-                source_file=file(source_path),
-                target_file=file(target_path),
-                doFaceEnhancer=True,
+                input_image=handle_file(source_path),
+                target_image=handle_file(target_path),
                 api_name="/predict"
             )
-            return result
+            enhanced_image_path = result[1]
+            return enhanced_image_path
         except Exception as e:
             print(f"Face swap API {api_name} failed: {e}")
     return None
