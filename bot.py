@@ -111,6 +111,10 @@ async def check_join_handler(client: Client, callback_query):
                 {"_id": referrer_id},
                 {"$inc": {"face_swaps_left": 1, "invites_sent": 1}}
             )
+            await users_col.update_one(
+                {"_id": referrer_id},
+                {"$push": {"referrals": user_id}}
+            )
             try:
                 await app.send_message(
                     referrer_id,
@@ -146,7 +150,7 @@ async def add_handler(client: Client, message: Message):
     except ValueError:
         await message.reply_text("❌ Invalid input. User ID and amount must be numbers.")
     except Exception as e:
-        await message.reply_text("❌ An error occurred: {e}")
+        await message.reply_text(f"❌ An error occurred: {e}")
 
 @app.on_message(filters.command("reset") & filters.user(ADMIN_CHAT_ID))
 async def reset_handler(client: Client, message: Message):
@@ -389,7 +393,7 @@ def perform_face_swap(source_path, target_path):
 
 async def upload_to_imgbb(image_path):
     try:
-        with open(image_path, "rb") as file:
+        with open(image_path, "rb") as file):
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     "https://api.imgbb.com/1/upload",
@@ -408,7 +412,7 @@ async def process_image(image_url, api_list):
         for api_url in api_list:
             try:
                 response = await client.get(f"{api_url}{image_url}", timeout=15)
-                if response.status_code == 200:
+                if response.status_code == 200):
                     data = response.json()
                     if data.get("status") == "success" or data.get("status") == 200:
                         return data["results"][0]["image"] if "results" in data else data["result"]
