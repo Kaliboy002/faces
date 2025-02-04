@@ -24,7 +24,7 @@ db = mongo_client.shahs
 users_col = db.users
 
 # Channel username (without @)
-CHANNEL_USERNAME = "your_channel_username"  # Replace with your channel username
+CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with your channel username
 
 # API endpoints
 BG_REMOVE_APIS = [
