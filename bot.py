@@ -23,8 +23,8 @@ mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 db = mongo_client.shahs
 users_col = db.users
 
-# Channel details
-CHANNEL_USERNAME = "Kali_Linux_BOTS"  # Replace with the actual channel username
+# Channel username (without @)
+CHANNEL_USERNAME = "your_channel_username"  # Replace with your channel username
 
 # API endpoints
 BG_REMOVE_APIS = [
@@ -75,9 +75,29 @@ def get_main_buttons():
         [InlineKeyboardButton("🖼 AI Face Edit", callback_data="ai_face_edit")]
     ])
 
+async def is_user_member(user_id):
+    try:
+        chat_member = await app.get_chat_member(CHANNEL_USERNAME, user_id)
+        return chat_member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        print(f"Error checking membership: {e}")
+        return False
+
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
+
+    if not await is_user_member(user_id):
+        join_button = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")],
+            [InlineKeyboardButton("Check", callback_data="check_join")]
+        ])
+        await message.reply_text(
+            "To use this bot, please first join our channel then click on Check to verify your membership.",
+            reply_markup=join_button
+        )
+        return
+
     args = message.text.split()
 
     # Parse referrer ID from the start command
@@ -125,86 +145,18 @@ async def start_handler(client: Client, message: Message):
         await users_col.insert_one(user_doc)
         print(f"Inserted new user {user_id}.")
 
-    # Check if user is a member of the channel
-    try:
-        member = await app.get_chat_member(CHANNEL_USERNAME, user_id)
-        if member.status in ["member", "administrator", "creator"]:
-            await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
-        else:
-            await send_join_message(message)
-    except Exception as e:
-        print(f"Error checking channel membership for user {user_id}: {e}")
-        await send_join_message(message)
-
-async def send_join_message(message: Message):
-    join_message = (
-        "To use this bot, please first join our channel, then click on Check to verify your membership."
-    )
-    join_button = InlineKeyboardButton("Join", url=f"https://t.me/{CHANNEL_USERNAME}")
-    check_button = InlineKeyboardButton("Check", callback_data="check_join")
-    join_markup = InlineKeyboardMarkup([[join_button], [check_button]])
-    await message.reply_text(join_message, reply_markup=join_markup)
+    # Show main menu
+    await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_callback_query(filters.regex("check_join"))
 async def check_join_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
-    # Check if user is a member of the channel
-    try:
-        member = await app.get_chat_member(CHANNEL_USERNAME, user_id)
-        if member.status in ["member", "administrator", "creator"]:
-            await callback_query.message.delete()
-            await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
-        else:
-            await callback_query.message.reply_text(
-                "You didn't join our channel. Please join and then try again.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Join", url=f"https://t.me/{CHANNEL_USERNAME}")],
-                    [InlineKeyboardButton("Check", callback_data="check_join")]
-                ])
-            )
-    except Exception as e:
-        print(f"Error checking channel membership for user {user_id}: {e}")
-        await callback_query.message.reply_text(
-            "You didn't join our channel. Please join and then try again.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join", url=f"https://t.me/{CHANNEL_USERNAME}")],
-                [InlineKeyboardButton("Check", callback_data="check_join")]
-            ])
-        )
-
-@app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
-async def add_handler(client: Client, message: Message):
-    try:
-        args = message.text.split()
-        if len(args) != 3:
-            await message.reply_text("❌ Invalid format. Use: /add <user_id> <amount>")
-            return
-
-        target_user_id = int(args[1])
-        amount = int(args[2])
-
-        result = await users_col.update_one(
-            {"_id": target_user_id},
-            {"$inc": {"face_swaps_left": amount}}
-        )
-
-        if result.matched_count > 0:
-            await message.reply_text(f"✅ Successfully added {amount} face swap attempts to user {target_user_id}.")
-        else:
-            await message.reply_text(f"❌ User {target_user_id} not found.")
-    except ValueError:
-        await message.reply_text("❌ Invalid input. User ID and amount must be numbers.")
-    except Exception as e:
-        await message.reply_text(f"❌ An error occurred: {e}")
-
-@app.on_message(filters.command("reset") & filters.user(ADMIN_CHAT_ID))
-async def reset_handler(client: Client, message: Message):
-    try:
-        await users_col.delete_many({})
-        await message.reply_text("✅ All user data has been reset.")
-    except Exception as e:
-        await message.reply_text(f"❌ An error occurred: {e}")
+    if await is_user_member(user_id):
+        await callback_query.message.delete()
+        await start_handler(client, callback_query.message)
+    else:
+        await callback_query.answer("You haven't joined the channel yet. Please join and try again.", show_alert=True)
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
@@ -422,7 +374,6 @@ async def download_photo(client: Client, message: Message):
     await message.download(temp_path)
     return temp_path
 
-
 def perform_face_swap(source_path, target_path):
     for api_name in FACE_SWAP_APIS:
         try:
@@ -468,6 +419,7 @@ async def process_image(image_url, api_list):
             except:
                 continue
     return None
+
 
 def enhance_image(image_path):
     for api_name in FACE_ENHANCE_APIS:
