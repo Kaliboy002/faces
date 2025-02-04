@@ -308,18 +308,13 @@ async def process_ai_face_edit(client: Client, message: Message):
 
     try:
         await message.download(temp_path)
-        imgbb_url = await upload_to_imgbb(temp_path)
-        if not imgbb_url:
-            await message.reply_text("❌ Failed to upload image. Please try again.")
-            return
-
-        enhanced_url = await enhance_image(imgbb_url)
-        if not enhanced_url:
+        enhanced_path = await enhance_image(temp_path)
+        if not enhanced_path:
             await message.reply_text("❌ AI Face Edit failed. Try another image.")
             return
 
         await message.reply_photo(
-            enhanced_url,
+            enhanced_path,
             caption="✅ AI Face Edit completed!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="processed_back")]
@@ -414,31 +409,31 @@ async def process_image(image_url, api_list):
                 continue
     return None
 
-async def enhance_image(image_url):
-    client = GradioClient(FACE_ENHANCE_API)
-    try:
-        result = client.predict(
-            input_image=handle_file(image_url),
-            prompt="",
-            negative_prompt="makeup, lipstick, eyeliner, smooth skin, unrealistic face",
-            seed=42,
-            upscale_factor=2,
-            controlnet_scale=0.3,
-            controlnet_decay=1,
-            condition_scale=3,
-            tile_width=128,
-            tile_height=128,
-            denoise_strength=0.25,
-            num_inference_steps=15,
-            solver="DPMSolver",
-            api_name="/process"
-        )
-        enhanced_image_path = result[1]
-        imgbb_url = await upload_to_imgbb(enhanced_image_path)
-        return imgbb_url
-    except Exception as e:
-        print(f"Enhance image error: {e}")
-        return None
+async def enhance_image(image_path):
+    for api_name in [FACE_ENHANCE_API]:
+        try:
+            client = GradioClient(api_name)
+            result = client.predict(
+                source_file=file(image_path),
+                prompt="",
+                negative_prompt="makeup, lipstick, eyeliner, smooth skin, unrealistic face",
+                seed=42,
+                upscale_factor=2,
+                controlnet_scale=0.3,
+                controlnet_decay=1,
+                condition_scale=3,
+                tile_width=128,
+                tile_height=128,
+                denoise_strength=0.25,
+                num_inference_steps=15,
+                solver="DPMSolver",
+                api_name="/process"
+            )
+            enhanced_image_path = result[1]
+            return enhanced_image_path
+        except Exception as e:
+            print(f"Enhance image error: {e}")
+    return None
 
 def cleanup_files(user_id):
     if user_id in user_data:
