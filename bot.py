@@ -5,7 +5,7 @@ import tempfile
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from gradio_client import Client as GradioClient, file, handle_file
+from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 
 # Bot credentials
@@ -32,7 +32,18 @@ ENHANCE_APIS = [
     "https://ar-api-08uk.onrender.com/remini?url=",
     "https://api.nyxs.pw/tools/hd?url="
 ]
-FACE_ENHANCE_API = "byondxr/finegrain-image-enhancer"
+FACE_ENHANCE_APIS = [
+    "byondxr/finegrain-image-enhancer",
+    "finegrain/finegrain-image-enhancer",
+    "Svngoku/finegrain-image-enhancer",
+    "jiuface/finegrain-image-enhancer",
+    "ZENLLC/finegrain-image-enhancer",
+    "aliceblue11/finegrain-image-enhancer11",
+    "aliceblue11/finegrain-image-enhancer111",
+    "mukaist/finegrain-image-enhancer",
+    "Greff3/finegrain-image-enhancer",
+    "gnosticdev/finegrain-image-enhancer"
+]
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
@@ -135,7 +146,7 @@ async def add_handler(client: Client, message: Message):
     except ValueError:
         await message.reply_text("❌ Invalid input. User ID and amount must be numbers.")
     except Exception as e:
-        await message.reply_text(f"❌ An error occurred: {e}")
+        await message.reply_text("❌ An error occurred: {e}")
 
 @app.on_message(filters.command("reset") & filters.user(ADMIN_CHAT_ID))
 async def reset_handler(client: Client, message: Message):
@@ -415,7 +426,7 @@ async def process_image(image_url, api_list):
     return None
 
 def enhance_image(image_path):
-    for api_name in [FACE_ENHANCE_API]:
+    for api_name in FACE_ENHANCE_APIS:
         try:
             client = GradioClient(api_name)
             result = client.predict(
@@ -437,7 +448,7 @@ def enhance_image(image_path):
             enhanced_image_path = result[1]
             return enhanced_image_path
         except Exception as e:
-            print(f"Enhance image error: {e}")
+            print(f"Enhance image API {api_name} failed: {e}")
     return None
 
 def cleanup_files(user_id):
