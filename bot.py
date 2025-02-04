@@ -5,7 +5,7 @@ import tempfile
 import motor.motor_asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from gradio_client import Client as GradioClient, file
+from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 
 # Bot credentials
@@ -414,7 +414,7 @@ async def enhance_image(image_path):
         try:
             client = GradioClient(api_name)
             result = client.predict(
-                source_file=file(image_path),
+                input_image=handle_file(image_path),
                 prompt="",
                 negative_prompt="makeup, lipstick, eyeliner, smooth skin, unrealistic face",
                 seed=42,
