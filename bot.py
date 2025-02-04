@@ -58,8 +58,8 @@ app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 # Dictionary to store user selections and data
 user_selections = {}
 user_data = {}
-processing_users = set()  # To track processing users
-processing_face_swaps = set()  # To track face swap processing users
+processing_face_swaps = set()  # To track processing face swap users
+processing_ai_face_edits = set()  # To track processing AI face edit users
 
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -239,8 +239,13 @@ async def photo_handler(client: Client, message: Message):
         await handle_face_swap(client, message)
         processing_face_swaps.remove(user_id)
     elif user_choice == "ai_face_edit":
+        if user_id in processing_ai_face_edits:
+            await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
+            return
+        processing_ai_face_edits.add(user_id)
         await message.reply_text("🔄 Processing photo, please wait...")
         await process_ai_face_edit(client, message)
+        processing_ai_face_edits.remove(user_id)
     else:
         await message.reply_text("🔄 Processing photo, please wait...")
         api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
