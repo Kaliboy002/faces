@@ -232,22 +232,18 @@ async def photo_handler(client: Client, message: Message):
             await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
             return
         processing_users.add(user_id)
-        try:
-            await message.reply_text("🔄 Processing photo, please wait...")
-            await process_ai_face_edit(client, message)
-        finally:
-            processing_users.remove(user_id)
+        await message.reply_text("🔄 Processing photo, please wait...")
+        await process_ai_face_edit(client, message)
+        processing_users.remove(user_id)
     else:
         if user_id in processing_users:
             await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
             return
         processing_users.add(user_id)
-        try:
-            await message.reply_text("🔄 Processing photo, please wait...")
-            api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
-            await process_photo(client, message, api_list)
-        finally:
-            processing_users.remove(user_id)
+        await message.reply_text("🔄 Processing photo, please wait...")
+        api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
+        await process_photo(client, message, api_list)
+        processing_users.remove(user_id)
 
 async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
@@ -308,7 +304,8 @@ async def process_ai_face_edit(client: Client, message: Message):
 
     try:
         await message.download(temp_path)
-        enhanced_path = await enhance_image(temp_path)
+        enhanced_path = await asyncio.to_thread(enhance_image, temp_path)
+        
         if not enhanced_path:
             await message.reply_text("❌ AI Face Edit failed. Try another image.")
             return
@@ -329,7 +326,8 @@ async def process_ai_face_edit(client: Client, message: Message):
         print(f"Error: {e}")
         await message.reply_text("❌ An error occurred. Try again.")
     finally:
-        os.remove(temp_path)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 async def process_photo(client: Client, message: Message, api_list):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
@@ -359,7 +357,8 @@ async def process_photo(client: Client, message: Message, api_list):
         print(f"Error: {e}")
         await message.reply_text("❌ An error occurred. Try again.")
     finally:
-        os.remove(temp_path)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 async def download_photo(client: Client, message: Message):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
@@ -413,7 +412,7 @@ async def process_image(image_url, api_list):
                 continue
     return None
 
-async def enhance_image(image_path):
+def enhance_image(image_path):
     for api_name in [FACE_ENHANCE_API]:
         try:
             client = GradioClient(api_name)
