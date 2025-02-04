@@ -236,9 +236,7 @@ async def photo_handler(client: Client, message: Message):
             await message.reply_text("❌ Your face swap is already being processed. Please wait and try again later.")
             return
         processing_face_swaps.add(user_id)
-        await message.reply_text("🔄 Processing photo, please wait...")
-        await process_face_swap(client, message)
-        processing_face_swaps.remove(user_id)
+        await message.reply_text("📷 Send the target image (destination face).")
     elif user_choice == "ai_face_edit":
         if user_id in processing_users:
             await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
