@@ -33,10 +33,10 @@ ENHANCE_APIS = [
     "https://api.nyxs.pw/tools/hd?url="
 ]
 FACE_ENHANCE_APIS = [
-    "byondxr/finegrain-image-enhancer",
-    "finegrain/finegrain-image-enhancer",
+    "byondxrFUCK/finegrain-image-enhancer",
+    "finegrainFUCK/finegrain-image-enhancer",
     "Svngoku/finegrain-image-enhancer",
-    "jiuface/finegrain-image-enhancer",
+    "jiufaceFUCK/finegrain-image-enhancer",
     "ZENLLC/finegrain-image-enhancer",
     "aliceblue11/finegrain-image-enhancer11",
     "aliceblue11/finegrain-image-enhancer111",
