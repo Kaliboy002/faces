@@ -313,8 +313,12 @@ async def process_ai_face_edit(client: Client, message: Message):
             await message.reply_text("❌ AI Face Edit failed. Try another image.")
             return
 
+        # Ensure the enhanced image has a valid extension
+        valid_extension_path = enhanced_path + ".jpg"
+        os.rename(enhanced_path, valid_extension_path)
+
         await message.reply_photo(
-            enhanced_path,
+            valid_extension_path,
             caption="✅ AI Face Edit completed!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="processed_back")]
