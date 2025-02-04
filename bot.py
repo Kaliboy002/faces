@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 # Bot credentials
 API_ID = 15787995
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
-BOT_TOKEN = "7817420437:AAH5z1PnmDOd4w-viRAqCIuGSDiUKYzQ--Y"
+BOT_TOKEN = "7700980501:AAHTqBX-F_kn2Lj-IvLPWQoEX98oGl-5lK8"
 IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 
 # Admin chat ID
