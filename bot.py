@@ -7,6 +7,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 
 # Bot credentials
 API_ID = 15787995
@@ -52,6 +53,9 @@ FACE_SWAP_APIS = [
     "ovi054/face-swap-pro"
 ]
 
+# Cooldown time for AI face edit in seconds
+COOLDOWN_TIME = 3600  # 1 hour
+
 # Initialize Pyrogram bot
 app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -60,6 +64,7 @@ user_selections = {}
 user_data = {}
 processing_face_swaps = set()  # To track processing face swap users
 processing_ai_face_edits = set()  # To track processing AI face edit users
+ai_face_edit_cooldowns = {}  # To store cooldown end times for users
 
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -121,6 +126,20 @@ async def start_handler(client: Client, message: Message):
         # Insert new user document
         await users_col.insert_one(user_doc)
         print(f"Inserted new user {user_id}.")
+
+        # Notify admin about the new user
+        total_users = await users_col.count_documents({})
+        referrer_username = (await client.get_users(referrer_id)).username if referrer_id else "None"
+        await app.send_message(
+            ADMIN_CHAT_ID,
+            f"↫︙New User Joined The Bot.\n\n"
+            f"  ↫ ID: ❲ {user_id} ❳\n"
+            f"  ↫ Username: ❲ @{message.from_user.username} ❳\n"
+            f"  ↫ Firstname: ❲ {message.from_user.first_name} ❳\n"
+            f"  ↫ Referred by: @{referrer_username}\n"
+            f"  ↫ Total invites of user who joined bot: {user_doc['invites_sent']}\n\n"
+            f"↫︙Total Users of bot: ❲ {total_users} ❳"
+        )
 
     # Show main menu
     await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
@@ -198,7 +217,7 @@ async def reset_handler(client: Client, message: Message):
         await users_col.delete_many({})
         await message.reply_text("✅ All user data has been reset.")
     except Exception as e:
-        await message.reply_text("❌ An error occurred: {e}")
+        await message.reply_text(f"❌ An error occurred: {e}")
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
@@ -283,6 +302,14 @@ async def photo_handler(client: Client, message: Message):
         await handle_face_swap(client, message)
         processing_face_swaps.remove(user_id)
     elif user_choice == "ai_face_edit":
+        if user_id in ai_face_edit_cooldowns:
+            cooldown_end_time = ai_face_edit_cooldowns[user_id]
+            remaining_time = cooldown_end_time - datetime.now()
+            if remaining_time.total_seconds() > 0:
+                remaining_time_str = str(timedelta(seconds=int(remaining_time.total_seconds())))
+                await message.reply_text(f"❌ You must wait {remaining_time_str} before sending another photo for AI Face Edit.")
+                return
+
         if user_id in processing_ai_face_edits:
             await message.reply_text("❌ Your photo is already being processed. Please wait and try again later.")
             return
@@ -290,6 +317,7 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("🔄 Processing photo, please wait...")
         await process_ai_face_edit(client, message)
         processing_ai_face_edits.remove(user_id)
+        ai_face_edit_cooldowns[user_id] = datetime.now() + timedelta(seconds=COOLDOWN_TIME)
     else:
         await message.reply_text("🔄 Processing photo, please wait...")
         api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
@@ -415,7 +443,6 @@ async def download_photo(client: Client, message: Message):
         temp_path = temp_file.name
     await message.download(temp_path)
     return temp_path
-
 
 def perform_face_swap(source_path, target_path):
     for api_name in FACE_SWAP_APIS:
