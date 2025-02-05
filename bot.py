@@ -9,7 +9,7 @@ from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-# Bot credentials
+# Bot credentialshh
 API_ID = 15787995
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7700980501:AAHTqBX-F_kn2Lj-IvLPWQoEX98oGl-5lK8"
