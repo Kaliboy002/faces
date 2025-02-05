@@ -410,6 +410,7 @@ async def process_ai_face_edit(client: Client, message: Message):
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
+
 async def process_photo(client: Client, message: Message, api_list):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
         temp_path = temp_file.name
@@ -436,11 +437,11 @@ async def process_photo(client: Client, message: Message, api_list):
 
     except Exception as e:
         print(f"Error: {e}")
-      await message.reply_text("❌ An error occurred. Try again.")
+        await message.reply_text("❌ An error occurred. Try again.")
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-
+            
 async def download_photo(client: Client, message: Message):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
         temp_path = temp_file.name
