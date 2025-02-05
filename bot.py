@@ -9,7 +9,7 @@ from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-# Bot credentialshh
+# Bot credentials
 API_ID = 15787995
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
 BOT_TOKEN = "7700980501:AAHTqBX-F_kn2Lj-IvLPWQoEX98oGl-5lK8"
@@ -23,6 +23,7 @@ MONGO_URI = "mongodb+srv://Kali:SHM14002022SHM@cluster0.bxsct.mongodb.net/myData
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 db = mongo_client.shahs
 users_col = db.users
+settings_col = db.settings
 
 # API endpoints
 BG_REMOVE_APIS = [
@@ -48,8 +49,8 @@ FACE_ENHANCE_APIS = [
 
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
-    "Kaliboy0012/face-swapm",
-    "Jonny001/Image-Face-Swap",
+    "Jonny001s/Image-Face-Swap",
+    "Kaliboy002/Image-Face-Swap",
     "ovi054/face-swap-pro"
 ]
 
@@ -66,8 +67,22 @@ processing_face_swaps = set()  # To track processing face swap users
 processing_ai_face_edits = set()  # To track processing AI face edit users
 ai_face_edit_cooldowns = {}  # To store cooldown end times for users
 
+# Dictionary to track users who have seen the fake join message
+fake_join_shown_users = set()
+
 # Thread pool for blocking tasks
-executor = ThreadPoolExecutor(max_workers=4)
+executor = ThreadPoolExecutor(max_workers=10)
+
+# Check and initialize settings in the database
+async def initialize_settings():
+    settings = await settings_col.find_one({"_id": "fake_join_setting"})
+    if settings is None:
+        await settings_col.insert_one({"_id": "fake_join_setting", "enabled": True})
+
+# Get the current state of the fake join setting
+async def is_fake_join_enabled():
+    settings = await settings_col.find_one({"_id": "fake_join_setting"})
+    return settings["enabled"]
 
 def get_main_buttons():
     return InlineKeyboardMarkup([
@@ -141,50 +156,27 @@ async def start_handler(client: Client, message: Message):
             f"↫︙Total Users of bot: ❲ {total_users} ❳"
         )
 
-    # Show main menu
-    await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+    # Check if fake join is enabled and if the user has not seen it yet
+    if await is_fake_join_enabled() and user_id not in fake_join_shown_users:
+        fake_join_shown_users.add(user_id)
+        await message.reply_text(
+            "To use this bot, you must join our channel first.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Join", url="https://t.me/your_channel_link")],
+                [InlineKeyboardButton("Check", callback_data="check_join")]
+            ])
+        )
+    else:
+        await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_callback_query(filters.regex("check_join"))
 async def check_join_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
     await callback_query.message.delete()
-    
-    # After checking, show the main menu
-    user = await users_col.find_one({"_id": user_id})
-    if not user:
-        referrer_id = None
-        if len(callback_query.message.text.split()) > 1 and callback_query.message.text.split()[1].isdigit():
-            referrer_id = int(callback_query.message.text.split()[1])
-        user_doc = {
-            "_id": user_id,
-            "name": callback_query.from_user.first_name,
-            "face_swaps_left": 2,
-            "invites_sent": 0,
-            "referrals": [],
-            "referral_link": f"https://t.me/{BOT_TOKEN.split(':')[0]}?start={user_id}"
-        }
-        if referrer_id:
-            user_doc["referrer"] = referrer_id
-            await users_col.update_one(
-                {"_id": referrer_id},
-                {"$inc": {"face_swaps_left": 1, "invites_sent": 1}}
-            )
-            await users_col.update_one(
-                {"_id": referrer_id},
-                {"$push": {"referrals": user_id}}
-            )
-            try:
-                await app.send_message(
-                    referrer_id,
-                    f"🎉 User {callback_query.from_user.first_name} started the bot using your referral link! You've received 1 additional face swap."
-                )
-            except:
-                pass
-        await users_col.insert_one(user_doc)
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
-    else:
-        await callback_query.message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
+
+    # Show the main menu when the user clicks "Check"
+    await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
@@ -218,6 +210,17 @@ async def reset_handler(client: Client, message: Message):
         await message.reply_text("✅ All user data has been reset.")
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
+
+@app.on_message(filters.command("on") & filters.user(ADMIN_CHAT_ID))
+async def enable_fake_join(client: Client, message: Message):
+    await settings_col.update_one({"_id": "fake_join_setting"}, {"$set": {"enabled": True}}, upsert=True)
+    fake_join_shown_users.clear()  # Clear the set to show the message to all users again
+    await message.reply_text("✅ Fake mandatory join channel message has been enabled.")
+
+@app.on_message(filters.command("off") & filters.user(ADMIN_CHAT_ID))
+async def disable_fake_join(client: Client, message: Message):
+    await settings_col.update_one({"_id": "fake_join_setting"}, {"$set": {"enabled": False}}, upsert=True)
+    await message.reply_text("✅ Fake mandatory join channel message has been disabled.")
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
@@ -285,13 +288,25 @@ async def button_handler(client: Client, callback_query):
             ])
         )
 
-@app.on_message(filters.photo)
+@app.on_message(filters.photo | filters.document)
 async def photo_handler(client: Client, message: Message):
     user_id = message.from_user.id
     user_choice = user_selections.get(user_id)
 
     if not user_choice:
         await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
+        return
+
+    # Check if fake join is enabled and if the user has not seen it yet
+    if await is_fake_join_enabled() and user_id not in fake_join_shown_users:
+        fake_join_shown_users.add(user_id)
+        await message.reply_text(
+            "To use this bot, you must join our channel first.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Join", url="https://t.me/your_channel_link")],
+                [InlineKeyboardButton("Check", callback_data="check_join")]
+            ])
+        )
         return
 
     if user_choice == "face_swap":
@@ -356,6 +371,10 @@ async def handle_face_swap(client: Client, message: Message):
                 perform_face_swap, user_data[user_id]["source_path"], user_data[user_id]["target_path"]
             )
             if swapped_image_path:
+                await message.reply_document(
+                    swapped_image_path,
+                    caption="✅ Face swap completed!"
+                )
                 await message.reply_photo(
                     swapped_image_path,
                     caption="✅ Face swap completed!",
@@ -383,7 +402,7 @@ async def process_ai_face_edit(client: Client, message: Message):
     try:
         await message.download(temp_path)
         enhanced_path = await asyncio.to_thread(enhance_image, temp_path)
-        
+
         if not enhanced_path:
             await message.reply_text("❌ AI Face Edit failed. Try another image.")
             return
@@ -392,6 +411,10 @@ async def process_ai_face_edit(client: Client, message: Message):
         valid_extension_path = enhanced_path + ".jpg"
         os.rename(enhanced_path, valid_extension_path)
 
+        await message.reply_document(
+            valid_extension_path,
+            caption="✅ AI Face Edit completed!"
+        )
         await message.reply_photo(
             valid_extension_path,
             caption="✅ AI Face Edit completed!",
@@ -406,7 +429,6 @@ async def process_ai_face_edit(client: Client, message: Message):
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-
 async def process_photo(client: Client, message: Message, api_list):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
         temp_path = temp_file.name
@@ -423,6 +445,10 @@ async def process_photo(client: Client, message: Message, api_list):
             await message.reply_text("❌ Processing failed. Try another image.")
             return
 
+        await message.reply_document(
+            processed_url,
+            caption="✅ Done!"
+        )
         await message.reply_photo(
             processed_url,
             caption="✅ Done!",
@@ -524,4 +550,5 @@ def cleanup_files(user_id):
 
 if __name__ == "__main__":
     print("Bot started...")
-    app.run()
+    asyncio.get_event_loop().run_until_complete(initialize_settings())
+    app.run()            
