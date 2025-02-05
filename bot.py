@@ -207,7 +207,7 @@ async def button_handler(client: Client, callback_query):
         await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
     elif user_choice == "processed_back":
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
     user_selections[user_id] = user_choice
@@ -227,40 +227,49 @@ async def button_handler(client: Client, callback_query):
             )
             return
 
-        await callback_query.message.reply_photo(
-            photo="https://i.imghippo.com/files/iDxy5739tZs.jpg",
-            caption="📷 Send the source image (face to swap).",
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+                caption="📷 Send the source image (face to swap)."
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
         user_data[user_id] = {"step": "awaiting_source"}
     elif user_choice == "ai_face_edit":
-        await callback_query.message.reply_photo(
-            photo="https://i.imghippo.com/files/iDxy5739tZs.jpg",
-            caption="📷 Send a photo for AI Face Edit!",
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+                caption="📷 Send a photo for AI Face Edit!"
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
     elif user_choice == "remove_bg":
-        await callback_query.message.reply_photo(
-            photo="https://i.imghippo.com/files/eNXe4934iU.jpg",
-            caption="📷 Send a photo to remove its background!",
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/eNXe4934iU.jpg",
+                caption="📷 Send a photo to remove its background!"
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
     elif user_choice == "enhance_photo":
-        await callback_query.message.reply_photo(
-            photo="https://files.catbox.moe/utlaxp.jpg",
-            caption="✨ Send a photo to enhance it!",
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://files.catbox.moe/utlaxp.jpg",
+                caption="✨ Send a photo to enhance it!"
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
     else:
-       await callback_query.message.edit_text("Invalid choice. Please try again.", reply_markup=get_main_buttons())
+        await callback_query.message.edit_text("Invalid choice. Please try again.", reply_markup=get_main_buttons())
+
 
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
