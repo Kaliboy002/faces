@@ -4,7 +4,7 @@ import httpx
 import tempfile
 import motor.motor_asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 
@@ -228,7 +228,7 @@ async def button_handler(client: Client, callback_query):
             return
 
         await callback_query.message.edit_media(
-            media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+            media=InputMediaPhoto("https://i.imghippo.com/files/iDxy5739tZs.jpg"),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
@@ -239,7 +239,7 @@ async def button_handler(client: Client, callback_query):
         user_data[user_id] = {"step": "awaiting_source"}
     elif user_choice == "ai_face_edit":
         await callback_query.message.edit_media(
-            media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+            media=InputMediaPhoto("https://i.imghippo.com/files/iDxy5739tZs.jpg"),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
@@ -257,7 +257,7 @@ async def button_handler(client: Client, callback_query):
             else "✨ Send a photo to enhance it!"
         )
         await callback_query.message.edit_media(
-            media=image_url,
+            media=InputMediaPhoto(image_url),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
@@ -432,6 +432,7 @@ def perform_face_swap(source_path, target_path):
             print(f"Face swap API {api_name} failed: {e}")
     return None
 
+
 async def upload_to_imgbb(image_path):
     try:
         with open(image_path, "rb") as file:
@@ -462,7 +463,6 @@ async def process_image(image_url, api_list):
             except:
                 continue
     return None
-
 
 def enhance_image(image_path):
     for api_name in FACE_ENHANCE_APIS:
