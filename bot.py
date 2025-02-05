@@ -4,7 +4,7 @@ import httpx
 import tempfile
 import motor.motor_asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 
@@ -129,6 +129,8 @@ async def start_handler(client: Client, message: Message):
 async def check_join_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
+    await callback_query.message.delete()
+    
     # After checking, show the main menu
     user = await users_col.find_one({"_id": user_id})
     if not user:
@@ -161,9 +163,9 @@ async def check_join_handler(client: Client, callback_query):
             except:
                 pass
         await users_col.insert_one(user_doc)
-        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
-        await callback_query.message.edit_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
@@ -204,10 +206,11 @@ async def button_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
     if user_choice == "back":
-        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.delete()
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
     elif user_choice == "processed_back":
-        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
     user_selections[user_id] = user_choice
@@ -215,7 +218,7 @@ async def button_handler(client: Client, callback_query):
     if user_choice == "face_swap":
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
-            await callback_query.message.edit_text(
+            await callback_query.message.reply_text(
                 f"❌ You've used all your free face swaps.\n\n"
                 f"Your referral link: {user['referral_link']}\n"
                 f"Face swaps left: {user['face_swaps_left']}\n"
@@ -227,49 +230,41 @@ async def button_handler(client: Client, callback_query):
             )
             return
 
-        await callback_query.message.edit_media(
-            media=InputMediaPhoto(
-                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
-                caption="📷 Send the source image (face to swap)."
-            ),
+        await callback_query.message.delete()
+        await callback_query.message.reply_photo(
+            "https://i.imghippo.com/files/iDxy5739tZs.jpg",
+            caption="📷 Send the source image (face to swap).",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
         user_data[user_id] = {"step": "awaiting_source"}
     elif user_choice == "ai_face_edit":
-        await callback_query.message.edit_media(
-            media=InputMediaPhoto(
-                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
-                caption="📷 Send a photo for AI Face Edit!"
-            ),
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="back")]
-            ])
-        )
-    elif user_choice == "remove_bg":
-        await callback_query.message.edit_media(
-            media=InputMediaPhoto(
-                media="https://i.imghippo.com/files/eNXe4934iU.jpg",
-                caption="📷 Send a photo to remove its background!"
-            ),
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="back")]
-            ])
-        )
-    elif user_choice == "enhance_photo":
-        await callback_query.message.edit_media(
-            media=InputMediaPhoto(
-                media="https://files.catbox.moe/utlaxp.jpg",
-                caption="✨ Send a photo to enhance it!"
-            ),
+        await callback_query.message.delete()
+        await callback_query.message.reply_photo(
+            "https://i.imghippo.com/files/iDxy5739tZs.jpg",
+            caption="📷 Send a photo for AI Face Edit!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
     else:
-        await callback_query.message.edit_text("Invalid choice. Please try again.", reply_markup=get_main_buttons())
-
+        image_url = (
+            "https://i.imghippo.com/files/eNXe4934iU.jpg" if user_choice == "remove_bg"
+            else "https://files.catbox.moe/utlaxp.jpg"
+        )
+        description = (
+            "📷 Send a photo to remove its background!" if user_choice == "remove_bg"
+            else "✨ Send a photo to enhance it!"
+        )
+        await callback_query.message.delete()
+        await callback_query.message.reply_photo(
+            image_url,
+            caption=description,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
 
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
