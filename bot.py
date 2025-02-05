@@ -247,24 +247,28 @@ async def button_handler(client: Client, callback_query):
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
-    else:
-        image_url = (
-            "https://i.imghippo.com/files/eNXe4934iU.jpg" if user_choice == "remove_bg"
-            else "https://files.catbox.moe/utlaxp.jpg"
-        )
-        description = (
-            "📷 Send a photo to remove its background!" if user_choice == "remove_bg"
-            else "✨ Send a photo to enhance it!"
-        )
+    elif user_choice == "remove_bg":
         await callback_query.message.edit_media(
             media=InputMediaPhoto(
-                media=image_url,
-                caption=description
+                media="https://i.imghippo.com/files/eNXe4934iU.jpg",
+                caption="📷 Send a photo to remove its background!"
             ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
+    elif user_choice == "enhance_photo":
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://files.catbox.moe/utlaxp.jpg",
+                caption="✨ Send a photo to enhance it!"
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+    else:
+        await callback_query.message.edit_text("Invalid choice. Please try again.", reply_markup=get_main_buttons())
 
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
@@ -462,7 +466,6 @@ async def process_image(image_url, api_list):
             except:
                 continue
     return None
-
 
 def enhance_image(image_path):
     for api_name in FACE_ENHANCE_APIS:
