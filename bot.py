@@ -463,6 +463,7 @@ async def process_image(image_url, api_list):
                 continue
     return None
 
+
 def enhance_image(image_path):
     for api_name in FACE_ENHANCE_APIS:
         try:
