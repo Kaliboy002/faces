@@ -228,24 +228,24 @@ async def button_handler(client: Client, callback_query):
             return
 
         await callback_query.message.edit_media(
-            media=InputMediaPhoto("https://i.imghippo.com/files/iDxy5739tZs.jpg"),
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+                caption="📷 Send the source image (face to swap)."
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
-        )
-        await callback_query.message.edit_caption(
-            caption="📷 Send the source image (face to swap)."
         )
         user_data[user_id] = {"step": "awaiting_source"}
     elif user_choice == "ai_face_edit":
         await callback_query.message.edit_media(
-            media=InputMediaPhoto("https://i.imghippo.com/files/iDxy5739tZs.jpg"),
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+                caption="📷 Send a photo for AI Face Edit!"
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
-        )
-        await callback_query.message.edit_caption(
-            caption="📷 Send a photo for AI Face Edit!"
         )
     else:
         image_url = (
@@ -257,7 +257,10 @@ async def button_handler(client: Client, callback_query):
             else "✨ Send a photo to enhance it!"
         )
         await callback_query.message.edit_media(
-            media=InputMediaPhoto(image_url),
+            media=InputMediaPhoto(
+                media=image_url,
+                caption=description
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
@@ -462,6 +465,7 @@ async def process_image(image_url, api_list):
             except:
                 continue
     return None
+
 
 def enhance_image(image_path):
     for api_name in FACE_ENHANCE_APIS:
