@@ -129,8 +129,6 @@ async def start_handler(client: Client, message: Message):
 async def check_join_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
-    await callback_query.message.edit_text("Checking membership...")
-
     # After checking, show the main menu
     user = await users_col.find_one({"_id": user_id})
     if not user:
@@ -209,7 +207,7 @@ async def button_handler(client: Client, callback_query):
         await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
     elif user_choice == "processed_back":
-        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
     user_selections[user_id] = user_choice
@@ -462,7 +460,7 @@ async def process_image(image_url, api_list):
                     elif data.get("status") is True and "result" in data:
                         return data["result"]
             except:
-               continue
+                continue
     return None
 
 def enhance_image(image_path):
