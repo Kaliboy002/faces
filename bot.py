@@ -4,9 +4,10 @@ import httpx
 import tempfile
 import motor.motor_asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 
 # Bot credentials
 API_ID = 15787995
@@ -55,11 +56,15 @@ FACE_SWAP_APIS = [
 # Initialize Pyrogram bot
 app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
+# Cooldown time in seconds (1 hour)
+AI_FACE_EDIT_COOLDOWN = 3600
+
 # Dictionary to store user selections and data
 user_selections = {}
 user_data = {}
 processing_face_swaps = set()  # To track processing face swap users
 processing_ai_face_edits = set()  # To track processing AI face edit users
+cooldown_times = {}  # To track cooldown times for AI Face Edit
 
 # Thread pool for blocking tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -79,8 +84,11 @@ async def start_handler(client: Client, message: Message):
 
     # Parse referrer ID from the start command
     referrer_id = None
+    referrer_username = None
     if len(args) > 1 and args[1].isdigit():
         referrer_id = int(args[1])
+        referrer_user = await users_col.find_one({"_id": referrer_id})
+        referrer_username = referrer_user['name'] if referrer_user else "None"
         print(f"Referrer ID detected: {referrer_id}")
 
     # Check if the user already exists
@@ -125,12 +133,18 @@ async def start_handler(client: Client, message: Message):
     # Show main menu
     await message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
 
+    # Notify admin about new user
+    total_users = await users_col.count_documents({})
+    referrer_info = f'Referred by : @{referrer_username}' if referrer_username else ''
+    await client.send_message(
+        ADMIN_CHAT_ID,
+        f"↫︙New User Joined The Bot.\n\n  ↫ ID: ❲ {user_id} ❳\n  ↫ Username: ❲ @{message.from_user.username} ❳\n  ↫ Firstname: ❲ {message.from_user.first_name} ❳\n  {referrer_info}\n  ↫ total invites of user who joined bot : {user_doc['invites_sent']}\n\n↫︙Total Users of bot : ❲ {total_users} ❳"
+    )
+
 @app.on_callback_query(filters.regex("check_join"))
 async def check_join_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
-    await callback_query.message.delete()
-    
     # After checking, show the main menu
     user = await users_col.find_one({"_id": user_id})
     if not user:
@@ -163,9 +177,9 @@ async def check_join_handler(client: Client, callback_query):
             except:
                 pass
         await users_col.insert_one(user_doc)
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
     else:
-        await callback_query.message.reply_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.edit_text("Welcome back! Choose an option:", reply_markup=get_main_buttons())
 
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
@@ -206,11 +220,10 @@ async def button_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
     if user_choice == "back":
-        await callback_query.message.delete()
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
     elif user_choice == "processed_back":
-        await callback_query.message.reply_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
+        await callback_query.message.edit_text("Welcome! Choose an option:", reply_markup=get_main_buttons())
         return
 
     user_selections[user_id] = user_choice
@@ -218,7 +231,7 @@ async def button_handler(client: Client, callback_query):
     if user_choice == "face_swap":
         user = await users_col.find_one({"_id": user_id})
         if user["face_swaps_left"] <= 0:
-            await callback_query.message.reply_text(
+            await callback_query.message.edit_text(
                 f"❌ You've used all your free face swaps.\n\n"
                 f"Your referral link: {user['referral_link']}\n"
                 f"Face swaps left: {user['face_swaps_left']}\n"
@@ -230,41 +243,63 @@ async def button_handler(client: Client, callback_query):
             )
             return
 
-        await callback_query.message.delete()
-        await callback_query.message.reply_photo(
-            "https://i.imghippo.com/files/iDxy5739tZs.jpg",
-            caption="📷 Send the source image (face to swap).",
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+                caption="📷 Send the source image (face to swap)."
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
         user_data[user_id] = {"step": "awaiting_source"}
     elif user_choice == "ai_face_edit":
-        await callback_query.message.delete()
-        await callback_query.message.reply_photo(
-            "https://i.imghippo.com/files/iDxy5739tZs.jpg",
-            caption="📷 Send a photo for AI Face Edit!",
+        if user_id in cooldown_times:
+            now = datetime.now()
+            cooldown_end = cooldown_times[user_id]
+            if now < cooldown_end:
+                remaining_time = cooldown_end - now
+                hours, remainder = divmod(remaining_time.total_seconds(), 3600)
+                minutes, seconds = divmod(remainder, 60)
+                await callback_query.message.edit_text(
+                    f"❌ You must wait {int(hours)}Hr {int(minutes)}Min {int(seconds)}Sec before using AI Face Edit again.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 Back", callback_data="back")]
+                    ])
+                )
+                return
+
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/iDxy5739tZs.jpg",
+                caption="📷 Send a photo for AI Face Edit!"
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+    elif user_choice == "remove_bg":
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://i.imghippo.com/files/eNXe4934iU.jpg",
+                caption="📷 Send a photo to remove its background!"
+            ),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+    elif user_choice == "enhance_photo":
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(
+                media="https://files.catbox.moe/utlaxp.jpg",
+                caption="✨ Send a photo to enhance it!"
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
         )
     else:
-        image_url = (
-            "https://i.imghippo.com/files/eNXe4934iU.jpg" if user_choice == "remove_bg"
-            else "https://files.catbox.moe/utlaxp.jpg"
-        )
-        description = (
-            "📷 Send a photo to remove its background!" if user_choice == "remove_bg"
-            else "✨ Send a photo to enhance it!"
-        )
-        await callback_query.message.delete()
-        await callback_query.message.reply_photo(
-            image_url,
-            caption=description,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="back")]
-            ])
-        )
+        await callback_query.message.edit_text("Invalid choice. Please try again.", reply_markup=get_main_buttons())
 
 @app.on_message(filters.photo)
 async def photo_handler(client: Client, message: Message):
@@ -371,6 +406,7 @@ async def process_ai_face_edit(client: Client, message: Message):
                 [InlineKeyboardButton("🔙 Back", callback_data="processed_back")]
             ])
         )
+        cooldown_times[message.from_user.id] = datetime.now() + timedelta(seconds=AI_FACE_EDIT_COOLDOWN)
 
     except Exception as e:
         print(f"Error: {e}")
@@ -378,6 +414,7 @@ async def process_ai_face_edit(client: Client, message: Message):
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
 
 async def process_photo(client: Client, message: Message, api_list):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
@@ -400,8 +437,7 @@ async def process_photo(client: Client, message: Message, api_list):
             caption="✅ Done!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="processed_back")]
-            ])
-        )
+            ]))
 
     except Exception as e:
         print(f"Error: {e}")
@@ -409,13 +445,12 @@ async def process_photo(client: Client, message: Message, api_list):
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-
+            
 async def download_photo(client: Client, message: Message):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
         temp_path = temp_file.name
     await message.download(temp_path)
     return temp_path
-
 
 def perform_face_swap(source_path, target_path):
     for api_name in FACE_SWAP_APIS:
