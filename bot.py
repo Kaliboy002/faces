@@ -129,6 +129,8 @@ async def start_handler(client: Client, message: Message):
 async def check_join_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
 
+    await callback_query.message.edit_text("Checking membership...")
+
     # After checking, show the main menu
     user = await users_col.find_one({"_id": user_id})
     if not user:
@@ -264,9 +266,6 @@ async def button_handler(client: Client, callback_query):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="back")]
             ])
-        )
-        await callback_query.message.edit_caption(
-            caption=description
         )
 
 @app.on_message(filters.photo)
@@ -463,9 +462,8 @@ async def process_image(image_url, api_list):
                     elif data.get("status") is True and "result" in data:
                         return data["result"]
             except:
-                continue
+               continue
     return None
-
 
 def enhance_image(image_path):
     for api_name in FACE_ENHANCE_APIS:
