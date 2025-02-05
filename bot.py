@@ -432,7 +432,6 @@ def perform_face_swap(source_path, target_path):
             print(f"Face swap API {api_name} failed: {e}")
     return None
 
-
 async def upload_to_imgbb(image_path):
     try:
         with open(image_path, "rb") as file:
