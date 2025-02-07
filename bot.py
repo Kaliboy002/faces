@@ -595,15 +595,15 @@ def enhance_image(image_path):
                 prompt="highly detailed, ultra HD, natural glow, ultra-sharp, realistic textures, perfect skin, vibrant colors",
                 negative_prompt="blurry, low resolution, overexposed, unrealistic textures, artificial, over-processed",
                 seed=42,
-                upscale_factor=2.5,
-                controlnet_scale=0.8,
-                controlnet_decay=0.6,
-                condition_scale=5,
-                tile_width=192,
-                tile_height=256,
-                denoise_strength=0.35,
-                num_inference_steps=27,
-                solver="DDIM",
+                upscale_factor=1.7,
+                controlnet_scale=0.5,
+                controlnet_decay=1,
+                condition_scale=3,
+                tile_width=128,
+                tile_height=128,
+                denoise_strength=0.25,
+                num_inference_steps=15,
+                solver="DDIM"
                 api_name="/process"
             )
             enhanced_image_path = result[1]
