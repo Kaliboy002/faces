@@ -57,6 +57,7 @@ FACE_SWAP_APIS = [
     "kmuti/face-swap",
     "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro",
+    "Kaliboy002/face-swapm",
     "mrbeliever/Face-Swapper",
     "Alibrown/Advanced-Face-Swaper",
     "kmuti/face-swap",
@@ -70,8 +71,7 @@ FACE_SWAP_APIS = [
     "andyaii/face-swap-new",
     "m-ric/Face-Swap-Roop",
     "Morta57/face-swap",
-    "nirajandhakal/Good-Face-Swap",
-    
+    "nirajandhakal/Good-Face-Swap"
 ]
 
 
