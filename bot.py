@@ -603,7 +603,7 @@ def enhance_image(image_path):
                 tile_height=128,
                 denoise_strength=0.25,
                 num_inference_steps=15,
-                solver="DDIM"
+                solver="DDIM",
                 api_name="/process"
             )
             enhanced_image_path = result[1]
