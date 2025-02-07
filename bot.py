@@ -51,10 +51,10 @@ FACE_ENHANCE_APIS = [
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
     "tuan2308/face-swap",
-    "peterpeter8585/face-swap",
+    "mukaist/face-swap-pro",
     "lalashechka/face-swap",
     "MartsoBodziu1994/face-swap",
-    "benner3000/AI-MASTERCLASS-FACE-SWAP",
+    "kmuti/face-swap",
     "Jonny001/Image-Face-Swap",
     "ovi054/face-swap-pro",
     "mrbeliever/Face-Swapper",
