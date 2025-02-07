@@ -590,22 +590,23 @@ def enhance_image(image_path):
     for api_name in FACE_ENHANCE_APIS:
         try:
             client = GradioClient(api_name)
-            result = client.predict(
-                input_image=handle_file(image_path),
-                prompt="",
-                negative_prompt="makeup, lipstick, eyeliner, smooth skin, unrealistic face",
-                seed=42,
-                upscale_factor=2,
-                controlnet_scale=0.3,
-                controlnet_decay=1,
-                condition_scale=3,
-                tile_width=128,
-                tile_height=128,
-                denoise_strength=0.25,
-                num_inference_steps=15,
-                solver="DPMSolver",
-                api_name="/process"
-            )
+                # Optimized for **high detail & GPU usage**
+    result = client.predict(
+        input_image=handle_file(image_url),  
+        prompt="highly detailed, ultra HD, natural glow, ultra-sharp, realistic textures, perfect skin, vibrant colors",  
+        negative_prompt="blurry, low resolution, overexposed, unrealistic textures, artificial, over-processed",  
+        seed=42,  
+        upscale_factor=2.5,  # Max upscale for **perfect clarity**
+        controlnet_scale=1.0,  
+        controlnet_decay=0.5,  
+        condition_scale=8,  # Increased enhancement intensity  
+        tile_width=192,  
+        tile_height=256,  
+        denoise_strength=0.1,  # **Keeps maximum detail while reducing artifacts**
+        num_inference_steps=35,  # **Higher steps for perfect processing**
+        solver="DPM",  # **Best solver for high-quality images**
+        api_name="/process"
+    )
             enhanced_image_path = result[1]
             return enhanced_image_path
         except Exception as e:
