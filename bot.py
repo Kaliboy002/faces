@@ -51,13 +51,13 @@ FACE_ENHANCE_APIS = [
 # Gradio Face Swap APIs
 FACE_SWAP_APIS = [
     "tuan2308/face-swap",
-    "mukaist/face-swap-pro",
-    "lalashechka/face-swap",
+    "Jonny001/Image-Face-Swap",
+    "Kaliboy002/face-swapm",
     "MartsoBodziu1994/face-swap",
     "kmuti/face-swap",
-    "Jonny001/Image-Face-Swap",
+    "mukaist/face-swap-pro",
     "ovi054/face-swap-pro",
-    "Kaliboy002/face-swapm",
+    "lalashechka/face-swap",
     "mrbeliever/Face-Swapper",
     "Alibrown/Advanced-Face-Swaper",
     "kmuti/face-swap",
@@ -384,11 +384,11 @@ async def handle_face_swap(client: Client, message: Message):
             if swapped_image_path:
                 await message.reply_document(
                     swapped_image_path,
-                    caption="✦ <b>Powered by :- </b>@AiPhotoYBot"
+                    caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot"
                 )
                 await message.reply_photo(
                     swapped_image_path,
-                    caption="✦ <b>Powered by :- </b>@AiPhotoYBot",
+                    caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔙 Back to Menu", callback_data="processed_back")]
                     ])
@@ -425,11 +425,11 @@ async def process_ai_face_edit(client: Client, message: Message):
 
         await message.reply_document(
             valid_extension_path,
-            caption="✦ <b>Powered by :- </b>@AiPhotoYBot"
+            caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot"
         )
         await message.reply_photo(
             valid_extension_path,
-            caption="✦ <b>Powered by :- </b>@AiPhotoYBot",
+            caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back to Menu", callback_data="processed_back")]
             ])
@@ -478,11 +478,11 @@ async def process_photo(client: Client, message: Message, api_list):
         if processed_url_v2:
             await message.reply_document(
                 processed_url_v2,
-                caption="✦ <b>Powered by :- </b>@AiPhotoYBot"
+                caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot"
             )
             await message.reply_photo(
                 processed_url_v2,
-                caption="✦ <b>Powered by :- </b>@AiPhotoYBot!",
+                caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot!",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back to Menu", callback_data="processed_back")]
                 ])
