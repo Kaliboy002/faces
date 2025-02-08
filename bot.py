@@ -12,11 +12,11 @@ from datetime import datetime, timedelta
 # Bot credentials
 API_ID = 15787995
 API_HASH = "e51a3154d2e0c45e5ed70251d68382de"
-BOT_TOKEN = "7700980501:AAHTqBX-F_kn2Lj-IvLPWQoEX98oGl-5lK8"
+BOT_TOKEN = "7027209614:AAGe8KSjUDhN36ye5Gpw6gRAKyVszjFIib0"
 IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 
 # Admin chat ID
-ADMIN_CHAT_ID = 6070733162  # Replace with the actual admin chat ID
+ADMIN_CHAT_ID = 7046488481  # Replace with the actual admin chat ID
 
 # MongoDB connection
 MONGO_URI = "mongodb+srv://Kali:SHM14002022SHM@cluster0.bxsct.mongodb.net/myDatabase?retryWrites=true&w=majority"
