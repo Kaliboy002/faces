@@ -140,7 +140,7 @@ async def start_handler(client: Client, message: Message):
         user_doc = {
             "_id": user_id,
             "name": message.from_user.first_name,
-            "face_swaps_left": 1,
+            "face_swaps_left": 2,
             "invites_sent": 0,
             "referrals": [],
             "referral_link": f"https://t.me/IMGEnhancer_Bot?start={user_id}"
@@ -360,7 +360,7 @@ async def handle_face_swap(client: Client, message: Message):
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
         await message.reply_text(
-            f"⚠️ <b><i>Sorry, You Have Used All Your Free Face Swaps </i></b>🎁\n\n🔐<b> Total invite : {user['invites_sent']}\n🎭 Swaps left :{user['face_swaps_left']}\n👤 Invite link :</b> <code>{user['referral_link']}</code>\n\n⚡ To get more free face swaps please invite users by your invite link \n\n📌 1 Invite = 3 Free Face Swaps",
+            f"⚠️ <b><i>Sorry, You Have Used All Your Free Face Swaps </i></b>🎁\n\n🔐<b> Total invite : {user['invites_sent']}\n🎭 Swaps left :{user['face_swaps_left']}\n👤 Invite link :</b> <code>https://t.me/ShukibReact12Bot?start={user_id}</code>\n\n⚡ To get more free face swaps please invite users by your invite link \n\n📌 1 Invite = 3 Free Face Swaps",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back to Menu", callback_data="back")]
             ])
