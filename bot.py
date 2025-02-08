@@ -21,7 +21,7 @@ ADMIN_CHAT_ID = 6070733162  # Replace with the actual admin chat ID
 # MongoDB connection
 MONGO_URI = "mongodb+srv://Kali:SHM14002022SHM@cluster0.bxsct.mongodb.net/myDatabase?retryWrites=true&w=majority"
 mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
-db = mongo_client.shahs
+db = mongo_client.shah
 users_col = db.users
 settings_col = db.settings
 
@@ -84,7 +84,7 @@ stats_col = db.statistics
 
 
 # Cooldown time for AI face edit in seconds
-COOLDOWN_TIME = 3  # 1 hour
+COOLDOWN_TIME = 300  # 1 hour
 
 # Initialize Pyrogram bot
 app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -143,7 +143,7 @@ async def start_handler(client: Client, message: Message):
             "face_swaps_left": 1,
             "invites_sent": 0,
             "referrals": [],
-            "referral_link": f"https://t.me/ShukibReact12Bot?start={user_id}"
+            "referral_link": f"https://t.me/IMGEnhancer_Bot?start={user_id}"
         }
         if referrer_id:
             user_doc["referrer"] = referrer_id
@@ -162,7 +162,7 @@ async def start_handler(client: Client, message: Message):
             referrer = await users_col.find_one({"_id": referrer_id})
             if referrer:
                 invites_sent = referrer.get("invites_sent", 0)
-                face_swaps_left = referrer.get("face_swaps_left", 0)
+                face_swaps_left = referrer.get("face_swaps_left", 3)
 
                 # Send notification to referrer with full data
                 try:
@@ -208,7 +208,7 @@ async def start_handler(client: Client, message: Message):
             "⚠️<b><i> To use this Bot, you must first join our Telegram channel</i></b>\n\n"
             "After successfully joining, click the 🔐𝗝𝗼𝗶𝗻𝗲𝗱 button to confirm your bot membership and to continue",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("➤ Jᴏɪɴ ᴄʜᴀɴɴᴇʟ", url="https://t.me/your_channel_link")],
+                [InlineKeyboardButton("➤ Jᴏɪɴ ᴄʜᴀɴɴᴇʟ", url="https://t.me/Kali_Linux_BOTS")],
                 [InlineKeyboardButton("🔐 𝗝𝗼𝗶𝗻𝗲𝗱", callback_data="check_join")]
             ])
         )
