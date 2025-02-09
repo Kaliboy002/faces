@@ -208,7 +208,7 @@ async def start_handler(client: Client, message: Message):
             "⚠️<b><i> To use this Bot, you must first join our Telegram channel</i></b>\n\n"
             "After successfully joining, click the 🔐𝗝𝗼𝗶𝗻𝗲𝗱 button to confirm your bot membership and to continue",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("➤ Jᴏɪɴ ᴄʜᴀɴɴᴇʟ", url="https://t.me/Kali_Linux_BOTS")],
+                [InlineKeyboardButton("➤ Jᴏɪɴ ᴄʜᴀɴɴᴇʟ", url="https://t.me/Kali_Number_BOT?start")],
                 [InlineKeyboardButton("🔐 𝗝𝗼𝗶𝗻𝗲𝗱", callback_data="check_join")]
             ])
         )
