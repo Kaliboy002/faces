@@ -360,7 +360,7 @@ async def handle_face_swap(client: Client, message: Message):
     user = await users_col.find_one({"_id": user_id})
     if user["face_swaps_left"] <= 0:
         await message.reply_text(
-            f"⚠️ <b><i>Sorry, You Have Used All Your Free Face Swaps </i></b>🎁\n\n🔐<b> Total invite : {user['invites_sent']}\n🎭 Swaps left :{user['face_swaps_left']}\n👤 Invite link :</b> <code>https://t.me/ShukibReact12Bot?start={user_id}</code>\n\n⚡ To get more free face swaps please invite users by your invite link \n\n📌 1 Invite = 3 Free Face Swaps",
+            f"⚠️ <b><i>Sorry, You Have Used All Your Free Face Swaps </i></b>🎁\n\n🔐<b> Total invite : {user['invites_sent']}\n🎭 Swaps left :{user['face_swaps_left']}\n👤 Invite link :</b> <code>https://t.me/IMGEnhancer_Bot?start={user_id}</code>\n\n⚡ To get more free face swaps please invite users by your invite link \n\n📌 1 Invite = 3 Free Face Swaps",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back to Menu", callback_data="back")]
             ])
