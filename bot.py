@@ -315,7 +315,7 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text(
             "⚠️<b><i> To use this Bot, you must first join our Telegram channel</i></b>\n\nAfter successfully joining, click the 🔐𝗝𝗼𝗶𝗻𝗲𝗱 button to confirm your bot membership and to continue",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("➤ Jᴏɪɴ ᴄʜᴀɴɴᴇʟ", url="https://t.me/your_channel_link")],
+                [InlineKeyboardButton("➤ Jᴏɪɴ ᴄʜᴀɴɴᴇʟ", url="https://t.me/Kali_Number_BOT?start=7046488481")],
                 [InlineKeyboardButton("🔐 𝗝𝗼𝗶𝗻𝗲𝗱", callback_data="check_join")]
             ])
         )
