@@ -301,7 +301,7 @@ async def photo_handler(client: Client, message: Message):
     user_choice = user_selections.get(user_id)
 
     if not user_choice:
-        await message.reply_text("Please select an option first.", reply_markup=get_main_buttons())
+        await message.reply_text("<b>Please select an option from below 🚀</b>", reply_markup=get_main_buttons())
         return
 
     # Check if forwarding is enabled
@@ -465,11 +465,11 @@ async def process_photo(client: Client, message: Message, api_list):
         if processed_url_old:
             await message.reply_document(
                 processed_url_old,
-                caption="✦ <b>Powered by :- </b>@AiPhotoYBot"
+                caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot"
             )
             await message.reply_photo(
                 processed_url_old,
-                caption="✦ <b>Powered by :- </b>@AiPhotoYBot",
+                caption="✦ <b>Powered by : </b>@IMGEnhancer_Bot",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back to Menu", callback_data="processed_back")]
                 ])
