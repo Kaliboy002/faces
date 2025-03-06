@@ -1,3 +1,5 @@
+httpx
+flask
 motor
 pillow
 tgcrypto # Specify a stable version
