@@ -9,6 +9,8 @@ from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from flask import Flask
+import threading
+import time
 
 # Flask app for health check
 app = Flask(__name__)
@@ -24,7 +26,7 @@ BOT_TOKEN = "7027209614:AAGe8KSjUDhN36ye5Gpw6gRAKyVszjFIib0"
 IMGBB_API_KEY = "b34225445e8edd8349d8a9fe68f20369"
 
 # Admin chat ID
-ADMIN_CHAT_ID = 7046488481  # Replace with the actual admin chat ID
+ADMIN_CHAT_ID = 7046488481
 
 # MongoDB connection
 MONGO_URI = "mongodb+srv://Kali:SHM14002022SHM@cluster0.bxsct.mongodb.net/myDatabase?retryWrites=true&w=majority"
@@ -84,7 +86,7 @@ FACE_SWAP_APIS = [
 ]
 
 # Cooldown time for AI face edit in seconds
-COOLDOWN_TIME = 300  # 5 minutes
+COOLDOWN_TIME = 300
 
 # Initialize Pyrogram bot
 app_bot = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -92,13 +94,13 @@ app_bot = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TO
 # Dictionary to store user selections and data
 user_selections = {}
 user_data = {}
-processing_face_swaps = set()  # To track processing face swap users
-processing_ai_face_edits = set()  # To track processing AI face edit users
-ai_face_edit_cooldowns = {}  # To store cooldown end times for users
+processing_face_swaps = set()
+processing_ai_face_edits = set()
+ai_face_edit_cooldowns = {}
 fake_join_shown_users = set()
 
 # Thread pool for blocking tasks
-executor = ThreadPoolExecutor(max_workers=2)  # Reduced to minimize resource usage
+executor = ThreadPoolExecutor(max_workers=2)
 
 # Check and initialize settings in the database
 async def initialize_settings():
@@ -624,7 +626,7 @@ def cleanup_files(user_id):
             if key in user_data[user_id] and os.path.exists(user_data[user_id][key]):
                 os.remove(user_data[user_id][key])
 
-#MESSAGE FORWARDING
+# MESSAGE FORWARDING
 @app_bot.on_message(filters.command("unforward") & filters.user(ADMIN_CHAT_ID))
 async def disable_forwarding(client: Client, message: Message):
     try:
@@ -641,7 +643,7 @@ async def enable_forwarding(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"⚠️ <b>Sorry, processing failed!\nplease try again </b>🙄 {e}")
 
-#TOP
+# TOP
 @app_bot.on_message(filters.command("top") & filters.user(ADMIN_CHAT_ID))
 async def top_invites_handler(client: Client, message: Message):
     try:
@@ -659,7 +661,7 @@ async def top_invites_handler(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
-#STATISTICS
+# STATISTICS
 @app_bot.on_message(filters.command("statistics") & filters.user(ADMIN_CHAT_ID))
 async def show_statistics(client: Client, message: Message):
     try:
@@ -679,7 +681,7 @@ async def show_statistics(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ Error retrieving statistics: {e}")
 
-#BROADCAST
+# BROADCAST
 @app_bot.on_message(filters.command("broadcast") & filters.user(ADMIN_CHAT_ID))
 async def broadcast_handler(client: Client, message: Message):
     if not message.reply_to_message:
@@ -708,7 +710,7 @@ async def broadcast_handler(client: Client, message: Message):
     )
     await message.reply_text(report)
 
-#ADDING FACE SWAPS
+# ADDING FACE SWAPS
 @app_bot.on_message(filters.command("adds") & filters.user(ADMIN_CHAT_ID))
 async def add_chances_for_all(client: Client, message: Message):
     try:
@@ -847,13 +849,34 @@ async def admin_handler(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
-async def main():
-    await initialize_settings()
-    print("Bot started...")
-    import threading
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8000), daemon=True).start()
-    await app_bot.start()
-    await app_bot.run()
+async def start_bot():
+    max_retries = 5
+    retry_delay = 60  # Start with 1 minute delay
+    for attempt in range(max_retries):
+        try:
+            await app_bot.start()
+            print("Bot started successfully.")
+            await app_bot.run()
+            break
+        except pyrogram.errors.exceptions.flood_420.FloodWait as e:
+            wait_time = e.value
+            print(f"Flood wait of {wait_time} seconds detected. Waiting...")
+            time.sleep(wait_time if wait_time > retry_delay else retry_delay)
+            retry_delay *= 2  # Exponential backoff
+        except Exception as e:
+            print(f"Error starting bot: {e}")
+            time.sleep(retry_delay)
+            retry_delay *= 2
+    else:
+        print("Max retries reached. Bot failed to start.")
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Start Flask in a separate thread
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    # Run the bot in the main thread with event loop
+    asyncio.run(start_bot())
