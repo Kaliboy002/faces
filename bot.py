@@ -8,6 +8,27 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from gradio_client import Client as GradioClient, handle_file
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+import logging
+from flask import Flask
+
+# Set up logging to capture only errors, save to file, and rotate if too large
+logging.basicConfig(
+    level=logging.ERROR,  # Only log errors
+    filename='/tmp/bot_errors.log',  # Use /tmp for Koyeb compatibility
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Suppress library logs (Pyrogram, httpx)
+logging.getLogger('pyrogram').setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
+# Function to rotate log file if it exceeds 5 MB
+def rotate_log_file():
+    log_path = '/tmp/bot_errors.log'
+    if os.path.exists(log_path) and os.path.getsize(log_path) > 5 * 1024 * 1024:  # 5 MB
+        with open(log_path, 'w') as f:
+            f.truncate()
 
 # Bot credentials
 API_ID = 15787995
@@ -24,6 +45,8 @@ mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 db = mongo_client.shah
 users_col = db.users
 settings_col = db.settings
+exempted_users_col = db.exempted_users
+stats_col = db.statistics
 
 # API endpoints
 BG_REMOVE_APIS = [
@@ -74,20 +97,18 @@ FACE_SWAP_APIS = [
     "nirajandhakal/Good-Face-Swap"
 ]
 
-
-# Add this to your MongoDB connection setup
-exempted_users_col = db.exempted_users
-
-
-# Add this collection for statistics
-stats_col = db.statistics
-
-
 # Cooldown time for AI face edit in seconds
-COOLDOWN_TIME = 300  # 1 hour
+COOLDOWN_TIME = 300  # 5 minutes
 
 # Initialize Pyrogram bot
 app = Client("image_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+# Flask app for health check
+flask_app = Flask(__name__)
+
+@flask_app.route('/health', methods=['GET'])
+def health_check():
+    return "OK", 200
 
 # Dictionary to store user selections and data
 user_selections = {}
@@ -100,13 +121,28 @@ ai_face_edit_cooldowns = {}  # To store cooldown end times for users
 fake_join_shown_users = set()
 
 # Thread pool for blocking tasks
-executor = ThreadPoolExecutor(max_workers=10)
+executor = ThreadPoolExecutor(max_workers=7)  # Set to 7 as previously optimized
 
 # Check and initialize settings in the database
 async def initialize_settings():
     settings = await settings_col.find_one({"_id": "fake_join_setting"})
     if settings is None:
         await settings_col.insert_one({"_id": "fake_join_setting", "enabled": True})
+
+    forwarding_setting = await settings_col.find_one({"_id": "forwarding"})
+    if forwarding_setting is None:
+        await settings_col.insert_one({"_id": "forwarding", "enabled": False})
+
+    stats = await stats_col.find_one({"_id": "usage_stats"})
+    if not stats:
+        await stats_col.insert_one({
+            "_id": "usage_stats",
+            "face_swaps": 0,
+            "remove_bg": 0,
+            "ai_face_edits": 0,
+            "enhanced_photos": 0,
+            "blocked_users": 0
+        })
 
 # Get the current state of the fake join setting
 async def is_fake_join_enabled():
@@ -120,7 +156,6 @@ def get_main_buttons():
         [InlineKeyboardButton("🎭 AI Face Swaps", callback_data="face_swap")],
         [InlineKeyboardButton("🎨 Beautify | Colorized", callback_data="ai_face_edit")]
     ])
-    
 
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
@@ -131,7 +166,6 @@ async def start_handler(client: Client, message: Message):
     referrer_id = None
     if len(args) > 1 and args[1].isdigit():
         referrer_id = int(args[1])
-        print(f"Referrer ID detected: {referrer_id}")
 
     # Check if the user already exists
     user = await users_col.find_one({"_id": user_id})
@@ -156,7 +190,6 @@ async def start_handler(client: Client, message: Message):
                 {"_id": referrer_id},
                 {"$push": {"referrals": user_id}}
             )
-            print(f"Updated referrer {referrer_id} with new face swap and invite count.")
 
             # Fetch updated referrer details
             referrer = await users_col.find_one({"_id": referrer_id})
@@ -173,13 +206,11 @@ async def start_handler(client: Client, message: Message):
                         f"↫ 🔗 Total Invites: {invites_sent}\n"
                         f"↫ 🎭 Face Swaps Left: {face_swaps_left}"
                     )
-                    print(f"✅ Notification sent to referrer {referrer_id}.")
                 except Exception as e:
-                    print(f"❌ Failed to send notification to referrer {referrer_id}: {e}")
+                    logger.error(f"Failed to send notification to referrer {referrer_id}: {e}")
 
         # Insert new user document
         await users_col.insert_one(user_doc)
-        print(f"Inserted new user {user_id}.")
 
         # Notify admin about the new user
         total_users = await users_col.count_documents({})
@@ -216,7 +247,8 @@ async def start_handler(client: Client, message: Message):
         await message.reply_text(
             "<b>Welcome to AI Photo Editor 🙂🖐️</b>\nwhere you can transform your photos with stunning quality and effortless beauty using AI-powered advanced tools ⚡🦾\n\n➤ <b>Remove backgrounds</b> from any image automatically with ease \n✦ <b>Enhance old or low-quality</b> photos and see the magic \n➤ <b>Swap faces</b> with any desired photo using AI-powered tools \n✦<b> Beautify and colorize</b> your photos to perfect your appearance \n\n❖ <b>Please select an option 🚀</b>",
             reply_markup=get_main_buttons()
-        )        
+        )
+
 @app.on_callback_query(filters.regex("check_join"))
 async def check_join_handler(client: Client, callback_query):
     user_id = callback_query.from_user.id
@@ -227,7 +259,6 @@ async def check_join_handler(client: Client, callback_query):
         "<b>Welcome to AI Photo Editor 🙂🖐️</b>\nwhere you can transform your photos with stunning quality and effortless beauty using AI-powered advanced tools ⚡🦾\n\n➤ <b>Remove backgrounds</b> from any image automatically with ease \n✦ <b>Enhance old or low-quality</b> photos and see the magic \n➤ <b>Swap faces</b> with any desired photo using AI-powered tools \n✦<b> Beautify and colorize</b> your photos to perfect your appearance \n\n❖ <b>Please select an option 🚀</b>", 
         reply_markup=get_main_buttons()
     )
-
 
 @app.on_callback_query()
 async def button_handler(client: Client, callback_query):
@@ -293,7 +324,6 @@ async def button_handler(client: Client, callback_query):
                 [InlineKeyboardButton("🔙 Back to Menu", callback_data="back")]
             ])
         )
-    
 
 @app.on_message(filters.photo | filters.document)
 async def photo_handler(client: Client, message: Message):
@@ -320,6 +350,9 @@ async def photo_handler(client: Client, message: Message):
             ])
         )
         return
+
+    # Rotate log file before processing to manage storage
+    rotate_log_file()
 
     if user_choice == "face_swap":
         if user_id in processing_face_swaps:
@@ -349,9 +382,6 @@ async def photo_handler(client: Client, message: Message):
         await message.reply_text("𖣘<b> Processing, please wait </b>✈️")
         api_list = ENHANCE_APIS if user_choice == "enhance_photo" else BG_REMOVE_APIS
         await process_photo(client, message, api_list)
-
-
-
 
 async def handle_face_swap(client: Client, message: Message):
     user_id = message.from_user.id
@@ -401,7 +431,7 @@ async def handle_face_swap(client: Client, message: Message):
             else:
                 await message.reply_text("⚠️ <b>Sorry, processing failed!</b> \nplease try again later🙄")
         except Exception as e:
-            print(f"Face swap error: {e}")
+            logger.error(f"Face swap failed for user {user_id}: {e}")
             await message.reply_text("⚠️<b> Sorry, processing failed!\nplease try again later 🙄")
         finally:
             cleanup_files(user_id)
@@ -437,7 +467,7 @@ async def process_ai_face_edit(client: Client, message: Message):
         await stats_col.update_one({"_id": "usage_stats"}, {"$inc": {"ai_face_edits": 1}})
 
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"AI face edit failed for user {message.from_user.id}: {e}")
         await message.reply_text("⚠️ <b>Sorry, processing failed!</b>\nplease try again later 🙄")
     finally:
         if os.path.exists(temp_path):
@@ -452,6 +482,7 @@ async def process_photo(client: Client, message: Message, api_list):
         await message.download(temp_path)
         imgbb_url = await upload_to_imgbb(temp_path)
         if not imgbb_url:
+            logger.error(f"ImgBB upload failed for user {message.from_user.id}")
             await message.reply_text("⚠️ <b>Sorry, processing failed!</b>\nplease try again later 🙄")
             return
 
@@ -487,14 +518,14 @@ async def process_photo(client: Client, message: Message, api_list):
                     [InlineKeyboardButton("🔙 Back to Menu", callback_data="processed_back")]
                 ])
             )
-            
+
             if user_choice == "remove_bg":
                 await stats_col.update_one({"_id": "usage_stats"}, {"$inc": {"remove_bg": 1}})
             elif user_choice == "enhance_photo":
                 await stats_col.update_one({"_id": "usage_stats"}, {"$inc": {"enhanced_photos": 1}})
 
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Photo processing failed for user {message.from_user.id}: {e}")
         await message.reply_text("⚠️ <b>Sorry, processing failed!</b>\nplease try again later 🙄")
     finally:
         if os.path.exists(temp_path):
@@ -518,7 +549,7 @@ def perform_face_swap(source_path, target_path):
             )
             return result
         except Exception as e:
-            print(f"Face swap API {api_name} failed: {e}")
+            logger.error(f"Face swap API {api_name} failed: {e}")
     return None
 
 async def upload_to_imgbb(image_path):
@@ -534,7 +565,8 @@ async def upload_to_imgbb(image_path):
                 if response.status_code == 200:
                     return response.json()["data"]["url"]
         return None
-    except:
+    except Exception as e:
+        logger.error(f"ImgBB upload failed: {e}")
         return None
 
 async def process_image(image_url, api_list):
@@ -548,7 +580,8 @@ async def process_image(image_url, api_list):
                         return data["results"][0]["image"] if "results" in data else data["result"]
                     elif data.get("status") is True and "result" in data:
                         return data["result"]
-            except:
+            except Exception as e:
+                logger.error(f"Image processing failed with API {api_url}: {e}")
                 continue
     return None
 
@@ -583,7 +616,7 @@ def process_image_local(image_path, api_url):
                                 out_file.write(chunk)
                         return temp_path
         except Exception as e:
-            print(f"Processing image failed: {e}")
+            logger.error(f"Local image processing failed with API {api_url}: {e}")
     return None
 
 def enhance_image(image_path):
@@ -609,7 +642,7 @@ def enhance_image(image_path):
             enhanced_image_path = result[1]
             return enhanced_image_path
         except Exception as e:
-            print(f"Enhance image API {api_name} failed: {e}")
+            logger.error(f"Enhance image API {api_name} failed: {e}")
     return None
 
 def cleanup_files(user_id):
@@ -617,25 +650,15 @@ def cleanup_files(user_id):
         for key in ["source_path", "target_path"]:
             if key in user_data[user_id] and os.path.exists(user_data[user_id][key]):
                 os.remove(user_data[user_id][key])
-                
-                
-                
-                
-                
-                
-                
-                
-                
-#MESSAGE FORWARDING.    
 
+# MESSAGE FORWARDING
 @app.on_message(filters.command("unforward") & filters.user(ADMIN_CHAT_ID))
 async def disable_forwarding(client: Client, message: Message):
     try:
         await settings_col.update_one({"_id": "forwarding"}, {"$set": {"enabled": False}}, upsert=True)
         await message.reply_text("✅ Forwarding of photos to admin has been disabled.")
     except Exception as e:
-        await message.reply_text(f"⚠️ <b>Sorry, processing failed!\nplease try again </b>🙄 {e}")                
-
+        await message.reply_text(f"⚠️ <b>Sorry, processing failed!\nplease try again </b>🙄 {e}")
 
 @app.on_message(filters.command("forward") & filters.user(ADMIN_CHAT_ID))
 async def enable_forwarding(client: Client, message: Message):
@@ -645,19 +668,7 @@ async def enable_forwarding(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"⚠️ <b>Sorey processing failed!\nplease try again </b>🙄 {e}")
 
-
-
-async def initialize_settings():
-    settings = await settings_col.find_one({"_id": "fake_join_setting"})
-    if settings is None:
-        await settings_col.insert_one({"_id": "fake_join_setting", "enabled": True})
-
-    forwarding_setting = await settings_col.find_one({"_id": "forwarding"})
-    if forwarding_setting is None:
-        await settings_col.insert_one({"_id": "forwarding", "enabled": False})
-        
-#TOP.    #TOP.   #TOP
-
+# TOP
 @app.on_message(filters.command("top") & filters.user(ADMIN_CHAT_ID))
 async def top_invites_handler(client: Client, message: Message):
     try:
@@ -680,24 +691,7 @@ async def top_invites_handler(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
-
-#STATISTICS #STATISTICS
-
-# Add this in initialize_settings()
-async def initialize_settings():
-    # ... existing code ...
-    stats = await stats_col.find_one({"_id": "usage_stats"})
-    if not stats:
-        await stats_col.insert_one({
-            "_id": "usage_stats",
-            "face_swaps": 0,
-            "remove_bg": 0,
-            "ai_face_edits": 0,
-            "enhanced_photos": 0,
-            "blocked_users": 0
-        })
-
-# Add this handler
+# STATISTICS
 @app.on_message(filters.command("statistics") & filters.user(ADMIN_CHAT_ID))
 async def show_statistics(client: Client, message: Message):
     try:
@@ -724,12 +718,7 @@ async def show_statistics(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ Error retrieving statistics: {e}")
 
-
-
-#BROADCAST. #BROADCAST
-
-
-# Add the broadcast handler to your existing code
+# BROADCAST
 @app.on_message(filters.command("broadcast") & filters.user(ADMIN_CHAT_ID))
 async def broadcast_handler(client: Client, message: Message):
     if not message.reply_to_message:
@@ -750,7 +739,6 @@ async def broadcast_handler(client: Client, message: Message):
         except Exception as e:
             if "User is deleted" in str(e) or "Forbidden" in str(e):
                 await stats_col.update_one({"_id": "usage_stats"}, {"$inc": {"blocked_users": 1}})
-            print(f"Failed to send message to user {user_id}: {e}")
             fail_count += 1
 
     report = (
@@ -761,12 +749,7 @@ async def broadcast_handler(client: Client, message: Message):
     )
     await message.reply_text(report)
 
-
-
-
-
-#ADDING FACE SWAPS 
-
+# ADDING FACE SWAPS
 @app.on_message(filters.command("adds") & filters.user(ADMIN_CHAT_ID))
 async def add_chances_for_all(client: Client, message: Message):
     try:
@@ -787,16 +770,15 @@ async def add_chances_for_all(client: Client, message: Message):
             try:
                 await client.send_message(chat_id=user_id, text=f"<b>➕ Congratulations </b>🥳\n\nYou received free {amount} face swaps by admin 🩵")
             except Exception as e:
-                print(f"Failed to send notification to user {user_id}: {e}")
+                logger.error(f"Failed to send notification to user {user_id}: {e}")
 
         await message.reply_text(f"✅ Successfully added {amount} face swap attempts to {result.modified_count} users and notified them.")
     except ValueError:
         await message.reply_text("❌ Invalid input. Amount must be a number.")
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
-        
- #REDUCING FACE SWAP
-         
+
+# REDUCING FACE SWAP
 @app.on_message(filters.command("reduce") & filters.user(ADMIN_CHAT_ID))
 async def reduce_chances_for_all(client: Client, message: Message):
     try:
@@ -815,8 +797,7 @@ async def reduce_chances_for_all(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
-#ADDING FOR ONE USER
-
+# ADDING FOR ONE USER
 @app.on_message(filters.command("add") & filters.user(ADMIN_CHAT_ID))
 async def add_handler(client: Client, message: Message):
     try:
@@ -842,8 +823,7 @@ async def add_handler(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
-#RESET #RESET
-
+# RESET
 @app.on_message(filters.command("reset") & filters.user(ADMIN_CHAT_ID))
 async def reset_handler(client: Client, message: Message):
     try:
@@ -854,10 +834,9 @@ async def reset_handler(client: Client, message: Message):
 
         await message.reply_text("✅ All user data has been reset.")
     except Exception as e:
-        await message.reply_text(f"❌ An error occurred: {e}")        
-        
-#FAKE MANDATORY OFF  ON
+        await message.reply_text(f"❌ An error occurred: {e}")
 
+# FAKE MANDATORY OFF/ON
 @app.on_message(filters.command("on") & filters.user(ADMIN_CHAT_ID))
 async def enable_fake_join(client: Client, message: Message):
     await settings_col.update_one({"_id": "fake_join_setting"}, {"$set": {"enabled": True}}, upsert=True)
@@ -867,9 +846,9 @@ async def enable_fake_join(client: Client, message: Message):
 @app.on_message(filters.command("off") & filters.user(ADMIN_CHAT_ID))
 async def disable_fake_join(client: Client, message: Message):
     await settings_col.update_one({"_id": "fake_join_setting"}, {"$set": {"enabled": False}}, upsert=True)
-    await message.reply_text("✅ Fake mandatory join channel message has been disabled.")        
+    await message.reply_text("✅ Fake mandatory join channel message has been disabled.")
 
-#DELETE DATA
+# DELETE DATA
 @app.on_message(filters.command("del") & filters.user(ADMIN_CHAT_ID))
 async def delete_all_data_except_ids(client: Client, message: Message):
     try:
@@ -886,10 +865,7 @@ async def delete_all_data_except_ids(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
-
-
-#EXCEPTION FAKE MANDATORY
-
+# EXCEPTION FAKE MANDATORY
 @app.on_message(filters.command("except") & filters.user(ADMIN_CHAT_ID))
 async def remove_fake_join(client: Client, message: Message):
     try:
@@ -914,16 +890,13 @@ async def remove_fake_join(client: Client, message: Message):
         await message.reply_text("❌ Invalid input. User ID must be a number.")
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
-        
 
 async def is_user_exempted(user_id):
     exempted_user = await exempted_users_col.find_one({"_id": user_id})
     return exempted_user is not None and exempted_user.get("exempted", False)
 
-
-
 @app.on_message(filters.command("admin") & filters.user(ADMIN_CHAT_ID))
-async def add_handler(client: Client, message: Message):
+async def admin_handler(client: Client, message: Message):
     try:
         args = message.text.split()
         if len(args) != 3:
@@ -947,10 +920,16 @@ async def add_handler(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ An error occurred: {e}")
 
-
-
+def run_flask():
+    flask_app.run(host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
-    print("Bot started...")
+    print("Bot started...")  # Keep this to confirm startup
     asyncio.get_event_loop().run_until_complete(initialize_settings())
+    
+    # Start Flask in a separate thread
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Run Pyrogram bot
     app.run()
